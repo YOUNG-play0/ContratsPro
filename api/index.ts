@@ -134,6 +134,7 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
       ],
       response_format: { type: 'json_object' },
       reasoning_effort: 'none' as any,
+      max_tokens: 4096,
     });
 
     const resultText = completion.choices[0]?.message?.content;
