@@ -35,7 +35,7 @@ apiRouter.post('/extract-contract', async (req, res) => {
     const { text, imageBase64, mimeType, fileName } = req.body;
 
     if (!text && !imageBase64) {
-      return res.status(400).json({ error: 'Veuillez fournir du texte ou un fichier de contrat.' });
+      return res.status(400).json({ success: false, error: 'Veuillez fournir du texte ou un fichier de contrat.' });
     }
 
     const systemPrompt = `Tu es un juriste d'entreprise expert en droit des contrats commerciaux et droit des affaires français (Code de commerce, Code civil, Loi Châtel, Loi Hamon).
@@ -43,32 +43,49 @@ Analyse le document ou le texte de contrat fournisseur fourni et extrais rigoure
 Ne montre aucun raisonnement ou réflexion. Réponds directement et uniquement avec l'objet JSON, sans aucun texte avant ou après.
 
 Règles d'extraction :
-1. Catégorie : Choisis parmi : "telecom", "assurance", "saas", "energie", "maintenance", "autre".
-2. Fréquence de paiement : Choisis parmi : "mensuel", "trimestriel", "annuel", "ponctuel", "autre".
-3. Montant : extrait la valeur numérique (HT si disponible, sinon TTC) et la devise (souvent EUR).
-4. Dates : Format standard YYYY-MM-DD. Si une date n'est pas explicite, estime une date réaliste ou laisse vide.
-5. Tacite reconduction : Indique précisément si le contrat se renouvelle automatiquement (true/false) et les conditions.
-6. Préavis de résiliation : Nombre de jours ou mois requis avant l'échéance pour notifier la résiliation (ex: 30 jours, 3 mois).
-7. Modalités de résiliation : Extrais l'adresse postale, l'email ou le portail requis pour envoyer le préavis (ex: LRAR obligatoire).
-8. Clauses spécifiques : Signale tout engagement pluriannuel, frais de résiliation anticipée, pénalités, ou clause abusive/à risque.
-9. Statut suggéré : "active" (en cours), "watch" (attention échéance proche ou clause sensible), ou "cancel_pending" (résiliation à engager).
+1. vendorName : Nom exact de l'entreprise ou du prestataire fournisseur.
+2. category : Choisis strictement parmi : "telecom", "assurance", "saas", "energie", "maintenance", "autre".
+3. contractNumber : Numéro de référence ou de contrat si mentionné (ou chaîne vide).
+4. amount : Valeur numérique du montant (HT si disponible, sinon TTC).
+5. currency : Devise (ex: "EUR").
+6. paymentFrequency : Choisis strictement parmi : "mensuel", "trimestriel", "annuel", "ponctuel", "autre".
+7. signatureDate : Date de signature au format YYYY-MM-DD (ou chaîne vide si inconnue).
+8. startDate : Date d'effet ou de début au format YYYY-MM-DD.
+9. commitmentDurationMonths : Durée de la période d'engagement initiale en nombre de mois (ex: 12, 24, 36, ou 0 si sans engagement).
+10. endDate : Date d'échéance principale au format YYYY-MM-DD.
+11. noticePeriodDays : Nombre de jours de préavis requis avant l'échéance pour notifier la résiliation (ex: 30, 60, 90).
+12. tacitRenewal : true si le contrat se renouvelle par tacite reconduction, false sinon.
+13. cancellationContact : Objet structuré avec les coordonnées de résiliation :
+    - recipientName : Nom du service ou destinataire (ex: "Service Résiliation").
+    - address : Adresse postale complète de résiliation si mentionnée (ou chaîne vide).
+    - email : Email de résiliation ou contact (ou chaîne vide).
+    - phone : Numéro de téléphone (ou chaîne vide).
+14. keyClauses : Tableau de chaînes listant les clauses essentielles, pénalités, conditions de reconduction ou d'augmentation tarifaire.
+15. summary : Synthèse claire et concise du contrat et de ses conditions clés.
+16. suggestedStatus : Choisis strictement parmi : "active" (contrat en cours normal), "watch" (échéance proche ou clause sensible à surveiller), "cancel_pending" (à résilier).
 
 Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
 {
-  "vendor": "Nom du fournisseur",
+  "vendorName": "Nom du fournisseur",
   "category": "telecom | assurance | saas | energie | maintenance | autre",
+  "contractNumber": "NUM-12345",
   "amount": 0,
   "currency": "EUR",
-  "billingFrequency": "mensuel | trimestriel | annuel | ponctuel | autre",
+  "paymentFrequency": "mensuel | trimestriel | annuel | ponctuel | autre",
+  "signatureDate": "YYYY-MM-DD",
   "startDate": "YYYY-MM-DD",
+  "commitmentDurationMonths": 12,
   "endDate": "YYYY-MM-DD",
-  "noticeDays": 30,
-  "noticePeriodDescription": "ex: 30 jours avant la date anniversaire par lettre recommandée avec AR",
-  "terminationAddress": "Adresse ou service résiliation si mentionné",
+  "noticePeriodDays": 30,
   "tacitRenewal": true,
+  "cancellationContact": {
+    "recipientName": "Service Résiliation",
+    "address": "123 rue Exemple, 75001 Paris",
+    "email": "contact@fournisseur.com",
+    "phone": "0102030405"
+  },
   "keyClauses": ["Clause 1...", "Clause 2..."],
-  "riskLevel": "low | medium | high",
-  "riskAnalysis": "Courte analyse juridique des risques et points de vigilance pour l'acheteur/entreprise.",
+  "summary": "Résumé du contrat...",
   "suggestedStatus": "active | watch | cancel_pending"
 }`;
 
@@ -89,6 +106,7 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
 
         if (!parsedText) {
           return res.status(400).json({
+            success: false,
             error:
               "Le document PDF ne contient pas de texte extractible (PDF scanné ou sous forme d'image). Veuillez copier-coller directement le texte du contrat dans l'onglet 'Coller le texte' ou importer une image (JPG/PNG).",
           });
@@ -97,6 +115,7 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
       } catch (pdfError: any) {
         console.error('Error parsing PDF with unpdf:', pdfError);
         return res.status(400).json({
+          success: false,
           error:
             "Échec de la lecture du fichier PDF. Si le document est scanné ou verrouillé, veuillez utiliser le champ 'Coller le texte' pour soumettre le contenu du contrat.",
         });
@@ -143,10 +162,14 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
     }
 
     const parsedJson = JSON.parse(resultText);
-    res.json(parsedJson);
+    res.json({
+      success: true,
+      data: parsedJson,
+    });
   } catch (error: any) {
     console.error('Error extracting contract:', error);
     res.status(500).json({
+      success: false,
       error: error.message || "Erreur lors de l'analyse IA du contrat",
     });
   }
@@ -155,10 +178,11 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
 // Generate formal legal termination / renegotiation letter
 apiRouter.post('/generate-letter', async (req, res) => {
   try {
-    const { contract, companyName, letterType, customReason, senderInfo } = req.body;
+    const { contract, companyName, companyProfile, letterType, reason, customReason, customNotes, senderInfo } = req.body;
 
-    if (!contract || !contract.vendor) {
-      return res.status(400).json({ error: 'Données du contrat incomplètes.' });
+    const vendorName = contract?.vendorName || contract?.vendor;
+    if (!contract || !vendorName) {
+      return res.status(400).json({ success: false, error: 'Données du contrat incomplètes.' });
     }
 
     const systemPrompt = `Tu es un avocat d'affaires expert en contentieux et négociation contractuelle B2B en France.
@@ -173,18 +197,26 @@ Tes courriers doivent être clairs, fermes, professionnels, avec mentions d'envo
     };
 
     const requestedType = typeDescriptions[letterType] || 'Lettre de résiliation de contrat';
+    const finalCompanyName = companyName || companyProfile?.companyName || '[Nom de votre entreprise]';
+    const finalSignatoryName = senderInfo?.name || companyProfile?.signatoryName || '[Nom du signataire]';
+    const finalSignatoryTitle = senderInfo?.title || companyProfile?.signatoryTitle || 'Directeur Général / Responsable des Achats';
+    const finalAddress = senderInfo?.address || (companyProfile ? `${companyProfile.address}, ${companyProfile.postalCode} ${companyProfile.city}` : '[Adresse de votre entreprise]');
+    const terminationAddr = contract.cancellationContact?.address || contract.terminationAddress || '[Adresse du fournisseur / Service Résiliation]';
+    const contractNum = contract.contractNumber || contract.id || 'N/A';
+    const noticeDesc = contract.noticePeriodDays ? `${contract.noticePeriodDays} jours` : (contract.noticePeriodDescription || '30 jours');
+    const noteReason = reason || customReason || customNotes || 'Résiliation selon les termes convenus au contrat.';
 
     const userPrompt = `Rédige un courrier officiel et juridique pour :
 Objet : ${requestedType}
-Fournisseur destinataire : ${contract.vendor}
-Adresse de résiliation (si connue) : ${contract.terminationAddress || '[Adresse du fournisseur / Service Résiliation]'}
-Nom de l'entreprise émettrice : ${companyName || '[Nom de votre entreprise]'}
-Coordonnées émetteur : ${senderInfo?.name || '[Nom du signataire]'}, ${senderInfo?.title || 'Directeur Général / Responsable des Achats'}, ${senderInfo?.address || '[Adresse de votre entreprise]'}
-Numéro de contrat / Référence : ${contract.id || '[Référence du contrat]'}
-Montant annuel / mensuel : ${contract.amount} ${contract.currency} (${contract.billingFrequency})
+Fournisseur destinataire : ${vendorName}
+Adresse de résiliation (si connue) : ${terminationAddr}
+Nom de l'entreprise émettrice : ${finalCompanyName}
+Coordonnées émetteur : ${finalSignatoryName}, ${finalSignatoryTitle}, ${finalAddress}
+Numéro de contrat / Référence : ${contractNum}
+Montant annuel / mensuel : ${contract.amount || 'N/C'} ${contract.currency || 'EUR'} (${contract.paymentFrequency || contract.billingFrequency || 'mensuel'})
 Date d'échéance : ${contract.endDate || '[Date de fin]'}
-Préavis contractuel : ${contract.noticePeriodDescription || `${contract.noticeDays} jours`}
-Motif spécifique ou complémentaire : ${customReason || 'Résiliation selon les termes convenus au contrat.'}
+Préavis contractuel : ${noticeDesc}
+Motif spécifique ou complémentaire : ${noteReason}
 
 Le courrier doit être entièrement rédigé et prêt à être envoyé (avec en-tête, objet, corps du texte formel, formules de politesse juridiques, et mentions légales appropriées).`;
 
@@ -205,12 +237,14 @@ Le courrier doit être entièrement rédigé et prêt à être envoyé (avec en-
     }
 
     res.json({
+      success: true,
       letter: letterContent,
-      suggestedSubject: `${requestedType} - Contrat ${contract.vendor} (Réf: ${contract.id || 'N/A'})`,
+      suggestedSubject: `${requestedType} - Contrat ${vendorName} (Réf: ${contractNum})`,
     });
   } catch (error: any) {
     console.error('Error generating letter:', error);
     res.status(500).json({
+      success: false,
       error: error.message || 'Erreur lors de la génération du courrier juridique',
     });
   }
@@ -219,6 +253,9 @@ Le courrier doit être entièrement rédigé et prêt à être envoyé (avec en-
 // Mount router on both '/api' and '/' for maximum Vercel rewrite compatibility
 app.use('/api', apiRouter);
 app.use('/', apiRouter);
+
+// Vercel serverless function configuration (extend timeout to 30s)
+export const maxDuration = 30;
 
 export { app };
 export default app;

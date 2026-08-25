@@ -157,7 +157,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
         throw new Error(data.error || "Échec de l'extraction par l'IA.");
       }
 
-      const ext = data.data;
+      const ext = data.data || data;
 
       // Populate form with extracted data
       setFormData({
