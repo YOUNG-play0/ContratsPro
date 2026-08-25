@@ -1,13 +1,20 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import Groq from 'groq-sdk';
-import { PDFParse } from 'pdf-parse';
+import { extractText, getDocumentProxy } from 'unpdf';
 
 dotenv.config();
 
 const app = express();
 
 app.use(express.json({ limit: '25mb' }));
+
+// Helper to extract text from PDF using unpdf (serverless-friendly)
+async function extractPdfText(buffer: Uint8Array): Promise<string> {
+  const pdf = await getDocumentProxy(buffer);
+  const { text } = await extractText(pdf, { mergePages: true });
+  return Array.isArray(text) ? text.join('\n') : text || '';
+}
 
 // Lazy/Safe Groq client initialization
 function getGroqClient(): Groq {
@@ -72,15 +79,13 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
 
     let extractedText = text || '';
 
-    // If a PDF is uploaded, extract its text using pdf-parse
+    // If a PDF is uploaded, extract its text using unpdf
     if (imageBase64 && isPdf) {
       try {
         const base64Data = imageBase64.replace(/^data:[^;]+;base64,/, '');
         const pdfBuffer = Buffer.from(base64Data, 'base64');
-        const parser = new PDFParse({ data: pdfBuffer });
-        const pdfData = await parser.getText();
-        await parser.destroy().catch(() => {});
-        const parsedText = pdfData.text ? pdfData.text.trim() : '';
+        const rawText = await extractPdfText(new Uint8Array(pdfBuffer));
+        const parsedText = rawText ? rawText.trim() : '';
 
         if (!parsedText) {
           return res.status(400).json({
@@ -90,7 +95,7 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
         }
         extractedText = parsedText;
       } catch (pdfError: any) {
-        console.error('Error parsing PDF:', pdfError);
+        console.error('Error parsing PDF with unpdf:', pdfError);
         return res.status(400).json({
           error:
             "Échec de la lecture du fichier PDF. Si le document est scanné ou verrouillé, veuillez utiliser le champ 'Coller le texte' pour soumettre le contenu du contrat.",
