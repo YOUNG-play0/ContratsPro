@@ -6,6 +6,7 @@ export const DEFAULT_COMPANY_PROFILE: CompanyProfile = {
   address: '',
   postalCode: '',
   city: '',
+  country: 'FR',
   signatoryName: '',
   signatoryTitle: '',
   email: '',

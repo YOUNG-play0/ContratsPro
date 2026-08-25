@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  FileText,
   Plus,
   Bell,
   Building2,
@@ -29,27 +28,32 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.02)] backdrop-blur-md bg-white/95">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-20">
           {/* Brand & Title */}
           <div className="flex items-center space-x-6">
             <div
               id="brand-logo-container"
-              className="flex items-center space-x-3 cursor-pointer"
+              className="flex items-center space-x-3.5 cursor-pointer group"
               onClick={() => setActiveView('dashboard')}
             >
-              <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white shadow-xs">
-                <FileText className="w-5 h-5 text-indigo-400" />
+              <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl overflow-hidden shadow-sm border border-gray-200/80 bg-white flex items-center justify-center p-1 group-hover:scale-105 group-hover:shadow-md transition-all duration-200">
+                <img
+                  src="/logo.jpg"
+                  alt="ContratsPro Logo"
+                  className="w-full h-full object-contain rounded-xl"
+                  referrerPolicy="no-referrer"
+                />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="font-bold text-gray-900 tracking-tight text-base sm:text-lg">
+                  <span className="font-bold text-gray-900 tracking-tight text-lg sm:text-xl">
                     ContratsPro
                   </span>
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-700 rounded border border-gray-200">
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 rounded-md border border-emerald-200">
                     B2B
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 hidden sm:block">
+                <p className="text-xs text-gray-500 hidden sm:block font-medium">
                   Gestion des contrats fournisseurs PME/TPE
                 </p>
               </div>
@@ -112,11 +116,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="btn-company-profile"
               onClick={onOpenCompanyModal}
-              className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 text-xs font-medium transition-colors shadow-xs"
-              title="Configurer les informations de l'entreprise pour les lettres"
+              className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 text-xs font-medium transition-colors shadow-xs cursor-pointer"
+              title="Configurer les informations et la juridiction de l'entreprise pour les lettres"
             >
               <Building2 className="w-3.5 h-3.5 text-gray-500" />
-              <span className="max-w-[130px] truncate">{companyProfile.companyName}</span>
+              <span className="max-w-[130px] truncate">{companyProfile.companyName || 'Mon Entreprise'}</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded border border-gray-200">
+                {companyProfile.country || 'FR'}
+              </span>
               <SlidersHorizontal className="w-3 h-3 text-gray-400" />
             </button>
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Building2, Save, Check } from 'lucide-react';
+import { X, Building2, Save, Check, Globe, Shield } from 'lucide-react';
 import { CompanyProfile } from '../types';
+import { COUNTRIES_LIST, getLegalConfidenceLevel } from '../utils/countryUtils';
 
 interface CompanySettingsModalProps {
   companyProfile: CompanyProfile;
@@ -17,8 +18,13 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const [form, setForm] = useState<CompanyProfile>({ ...companyProfile });
+  const [form, setForm] = useState<CompanyProfile>({
+    ...companyProfile,
+    country: companyProfile.country || 'FR',
+  });
   const [saved, setSaved] = useState(false);
+
+  const selectedLegalTier = getLegalConfidenceLevel(form.country);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +50,7 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
                 Profil de votre entreprise
               </h2>
               <p className="text-xs text-gray-500">
-                Informations utilisées pour l'en-tête des lettres de résiliation
+                Informations utilisées pour l'en-tête et le cadre juridique des lettres de résiliation
               </p>
             </div>
           </div>
@@ -67,20 +73,70 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
               required
               value={form.companyName}
               onChange={(e) => setForm({ ...form, companyName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900 font-medium"
             />
+          </div>
+
+          {/* Country Selection & Legal Tier Indicator */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="font-semibold text-gray-800 flex items-center space-x-1.5">
+                <Globe className="w-4 h-4 text-indigo-600" />
+                <span>Pays d'établissement de l'entreprise (Juridiction) *</span>
+              </label>
+              <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md border ${selectedLegalTier.badgeStyle}`}>
+                {selectedLegalTier.badgeText}
+              </span>
+            </div>
+
+            <select
+              id="country-select"
+              value={form.country || 'FR'}
+              onChange={(e) => setForm({ ...form, country: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900 bg-white font-medium"
+            >
+              <optgroup label="Niveau 1 — France (Droit positif & Loi Châtel)">
+                {COUNTRIES_LIST.filter((c) => c.region === 'france').map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Niveau 2 — Union Européenne (Prudence juridique UE)">
+                {COUNTRIES_LIST.filter((c) => c.region === 'eu').map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Niveau 3 — International & Autres pays">
+                {COUNTRIES_LIST.filter((c) => c.region === 'world').map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+
+            <div className="flex items-start space-x-2 text-[11px] text-gray-600 bg-white p-2 rounded-lg border border-gray-200/80">
+              <Shield className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+              <p className="leading-tight">
+                <span className="font-semibold text-gray-800">{selectedLegalTier.levelTitle} : </span>
+                {selectedLegalTier.disclaimer}
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-gray-700 mb-1">
-                Numéro SIRET
+                Numéro d'immatriculation / SIRET / TVA
               </label>
               <input
                 type="text"
                 value={form.siret}
                 onChange={(e) => setForm({ ...form, siret: e.target.value })}
-                placeholder="Ex: 842 195 432 00028"
+                placeholder="Ex: 842 195 432 00028 ou CHE-123..."
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900"
               />
             </div>
@@ -93,7 +149,7 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
                 type="text"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="Ex: 01 42 68 55 00"
+                placeholder="Ex: +33 1 42 68 55 00"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900"
               />
             </div>
@@ -162,7 +218,7 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
                 type="text"
                 value={form.signatoryTitle}
                 onChange={(e) => setForm({ ...form, signatoryTitle: e.target.value })}
-                placeholder="Ex: Directeur Général"
+                placeholder="Ex: Managing Director / Directeur Général"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900"
               />
             </div>
@@ -176,7 +232,7 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="Ex: direction@entreprise.fr"
+              placeholder="Ex: legal@company.com"
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900"
             />
           </div>
@@ -185,14 +241,14 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
             >
               Annuler
             </button>
 
             <button
               type="submit"
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-xs transition-colors flex items-center space-x-1.5"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
             >
               {saved ? (
                 <>
@@ -212,3 +268,4 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
     </div>
   );
 };
+

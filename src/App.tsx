@@ -20,6 +20,7 @@ import { AddContractModal } from './components/AddContractModal';
 import { ContractDetailModal } from './components/ContractDetailModal';
 import { LetterGeneratorModal } from './components/LetterGeneratorModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
+import { EarlyAccessBanner } from './components/EarlyAccessBanner';
 
 const CONTRACTS_STORAGE_KEY = 'b2b_contracts_app_data_v2';
 const PROFILE_STORAGE_KEY = 'b2b_company_profile_data_v2';
@@ -209,6 +210,12 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        {/* Early Access Waitlist Banner */}
+        <EarlyAccessBanner
+          companyName={companyProfile.companyName}
+          contractsCount={contracts.length}
+        />
+
         {activeView === 'dashboard' ? (
           <>
             {/* Dashboard KPI Stats & Filters */}
@@ -244,8 +251,9 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white py-4 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-2">
-          <div className="flex items-center space-x-2">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-3">
+          <div className="flex items-center space-x-2.5">
+            <img src="/logo.jpg" alt="Logo" className="w-5 h-5 rounded object-contain border border-gray-200" />
             <span className="font-semibold text-gray-800">ContratsPro B2B</span>
             <span>•</span>
             <span>Gestion de contrats fournisseurs &amp; conformité juridique française</span>

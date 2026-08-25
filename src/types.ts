@@ -67,6 +67,7 @@ export interface CompanyProfile {
   address: string;
   postalCode: string;
   city: string;
+  country?: string;
   signatoryName: string;
   signatoryTitle: string;
   email: string;
