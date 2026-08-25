@@ -224,8 +224,11 @@ Notes supplémentaires : ${customNotes || 'Aucune'}`;
   }
 });
 
-// Vite middleware & start server
-async function startServer() {
+// Export Express app for Vercel serverless functions
+export { app };
+
+// Vite middleware & start server (for local dev and standard container hosting)
+export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -245,4 +248,8 @@ async function startServer() {
   });
 }
 
-startServer();
+// Only start the server if not running inside a serverless platform like Vercel
+if (!process.env.VERCEL) {
+  startServer();
+}
+
