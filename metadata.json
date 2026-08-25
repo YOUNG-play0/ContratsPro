@@ -1,0 +1,6 @@
+{
+  "name": "Gestion Contrats Fournisseurs",
+  "description": "Application B2B de gestion et suivi de contrats fournisseurs pour PME/TPE avec extraction IA, alertes d'échéances et préavis, et génération de lettres de résiliation conformes au droit français.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
