@@ -45,6 +45,7 @@ export interface Contract {
   signatureDate?: string;
   startDate?: string;
   commitmentDurationMonths?: number;
+  relationshipStartDate?: string; // Date de début de la relation commerciale
   endDate: string; // Date d'échéance YYYY-MM-DD
   noticePeriodDays: number; // Préavis en jours
   tacitRenewal: boolean; // Reconduction tacite

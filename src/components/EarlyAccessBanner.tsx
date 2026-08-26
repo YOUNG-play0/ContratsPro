@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, CheckCircle2, ArrowRight, Loader2, X } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface EarlyAccessBannerProps {
   companyName?: string;
@@ -10,6 +11,7 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
   companyName,
   contractsCount,
 }) => {
+  const { language } = useLanguage();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -43,7 +45,11 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('Veuillez saisir une adresse email valide.');
+      setErrorMessage(
+        language === 'fr'
+          ? 'Veuillez saisir une adresse email valide.'
+          : 'Please enter a valid work email.'
+      );
       return;
     }
 
@@ -75,7 +81,12 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
         // Ignore localStorage errors
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Impossible d’enregistrer votre email.');
+      setErrorMessage(
+        err.message ||
+          (language === 'fr'
+            ? 'Impossible d’enregistrer votre email.'
+            : 'Unable to save email address.')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -107,16 +118,22 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
           <div>
             <div className="flex items-center space-x-2 flex-wrap gap-y-1">
               <span className="px-2 py-0.5 text-[11px] font-bold tracking-wide uppercase bg-emerald-400/15 text-emerald-300 rounded-md border border-emerald-400/20">
-                Accès Anticipé Gratuit
+                {language === 'fr' ? 'Accès Anticipé Gratuit' : 'Free Early Access'}
               </span>
               <h3 className="text-sm sm:text-base font-semibold text-white">
-                ContratsPro est en accès anticipé gratuit et illimité.
+                {language === 'fr'
+                  ? 'ContratsPro est en accès anticipé gratuit et illimité.'
+                  : 'ContratsPro is currently free with unlimited early access.'}
               </h3>
             </div>
             <p className="text-xs sm:text-sm text-indigo-200/80 mt-0.5">
               {isSuccess
-                ? 'Merci ! Vous êtes inscrit(e). Vous serez informé(e) en priorité des nouveautés et de l’ouverture des abonnements Pro.'
-                : 'Inscrivez-vous pour être informé des nouveautés et de l’ouverture des abonnements Pro.'}
+                ? language === 'fr'
+                  ? 'Merci ! Vous êtes inscrit(e). Vous serez informé(e) en priorité des nouveautés.'
+                  : 'Thank you! You are registered and will receive priority release updates.'
+                : language === 'fr'
+                ? 'Inscrivez-vous pour être informé des nouveautés et de l’ouverture des fonctionnalités Pro.'
+                : 'Sign up to be notified of new releases and pro workflow features.'}
             </p>
           </div>
         </div>
@@ -126,7 +143,7 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
           {isSuccess ? (
             <div className="flex items-center space-x-2 bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Inscrit(e) avec succès !</span>
+              <span>{language === 'fr' ? 'Inscrit(e) avec succès !' : 'Successfully registered!'}</span>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
@@ -140,7 +157,7 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
                     setEmail(e.target.value);
                     if (errorMessage) setErrorMessage(null);
                   }}
-                  placeholder="votre.email@entreprise.fr"
+                  placeholder={language === 'fr' ? 'votre.email@entreprise.fr' : 'your.email@company.com'}
                   className="w-full sm:w-64 px-3.5 py-2 text-xs sm:text-sm bg-white/10 hover:bg-white/15 focus:bg-white/20 border border-white/20 focus:border-emerald-400 rounded-xl text-white placeholder-indigo-200/50 outline-hidden transition-all"
                   disabled={isSubmitting}
                 />
@@ -154,11 +171,11 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Envoi...</span>
+                    <span>{language === 'fr' ? 'Envoi...' : 'Sending...'}</span>
                   </>
                 ) : (
                   <>
-                    <span>Rejoindre</span>
+                    <span>{language === 'fr' ? 'Rejoindre' : 'Join'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
@@ -169,7 +186,7 @@ export const EarlyAccessBanner: React.FC<EarlyAccessBannerProps> = ({
           {/* Dismiss button */}
           <button
             onClick={handleDismiss}
-            aria-label="Fermer la bannière"
+            aria-label="Close banner"
             className="p-1.5 text-indigo-300/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
           >
             <X className="w-4 h-4" />

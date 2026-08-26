@@ -20,7 +20,13 @@ import {
 import { jsPDF } from 'jspdf';
 import { CompanyProfile, Contract } from '../types';
 import { formatDateFr } from '../utils/contractUtils';
-import { getLegalConfidenceLevel, LegalConfidenceInfo } from '../utils/countryUtils';
+import {
+  getLegalConfidenceLevel,
+  LegalConfidenceInfo,
+  calculateRelationshipDurationMonths,
+  isRelationOver24Months,
+  LEGAL_DISCLAIMER_TEXT,
+} from '../utils/countryUtils';
 
 interface LetterGeneratorModalProps {
   contract: Contract | null;
@@ -39,6 +45,12 @@ export const LetterGeneratorModal: React.FC<LetterGeneratorModalProps> = ({
 }) => {
   if (!isOpen || !contract) return null;
 
+  const isLongTermFR =
+    (companyProfile?.country || 'FR').toUpperCase() === 'FR' && isRelationOver24Months(contract);
+  const relationMonths = calculateRelationshipDurationMonths(
+    contract.relationshipStartDate || contract.startDate || contract.signatureDate
+  );
+
   const [reason, setReason] = useState<string>(
     "Résiliation à l'échéance contractuelle annuelle avec respect du délai de préavis."
   );
@@ -56,7 +68,7 @@ export const LetterGeneratorModal: React.FC<LetterGeneratorModalProps> = ({
     setAppliedLegalTier(getLegalConfidenceLevel(companyProfile?.country || 'FR'));
   }, [companyProfile?.country]);
 
-  // Generate fallback letter respecting the 3 levels
+  // Generate fallback letter respecting the 4 levels
   const buildFallbackLetter = (tier: LegalConfidenceInfo) => {
     const todayFr = new Intl.DateTimeFormat('fr-FR', {
       day: 'numeric',
@@ -102,10 +114,13 @@ Par la présente, je vous notifie formellement la décision de notre société, 
 
 Conformément aux stipulations contractuelles en vigueur et aux dispositions des articles 1103 et 1211 du Code civil (ainsi qu'aux dispositions applicables du Code de commerce et de la Loi Châtel / Art. L. 215-1 du Code de la consommation le cas échéant), nous entendons mettre fin à nos engagements à la date d'échéance contractuelle du ${formatDateFr(contract.endDate)}, en respectant scrupuleusement le délai de préavis de ${contract.noticePeriodDays || 30} jours.
 
+${isLongTermFR ? `Au titre de l'article L. 442-1 II du Code de commerce (prévention de la rupture brutale des relations commerciales établies), nous soulignons que notre préavis de notification respecte scrupuleusement les exigences de loyauté et l'historique de notre collaboration commerciale débutée le ${contract.relationshipStartDate || contract.startDate || 'N/C'}.\n` : ''}
 Motif / Précision :
 ${reason}
 
 En conséquence, nous vous demandons de bien vouloir cesser l'ensemble des prestations et d'interrompre tout prélèvement automatique sur notre compte bancaire à compter de cette date d'échéance.
+
+La présente notification est transmise sous la plus expresse réserve de tous nos droits et actions.
 
 Nous vous saurions gré de bien vouloir nous faire parvenir en retour un écrit confirmant la prise en compte de cette résiliation et indiquant la date effective de clôture de notre dossier.
 
@@ -120,10 +135,11 @@ ${signatoryTitle}
     }
 
     if (tier.level === 2) {
-      // LEVEL 2 (European Union)
+      // LEVEL 2 (EU + USA)
+      const isUS = companyProfile?.country === 'US' || companyProfile?.country === 'USA';
       return `${companyName}
 ${fullAddress}
-Registration / VAT: ${companyProfile.siret || 'N/A'}
+Registration / Tax ID: ${companyProfile.siret || 'N/A'}
 Contact: ${companyProfile.email || ''} | ${companyProfile.phone || ''}
 
                                             To:
@@ -140,12 +156,14 @@ Dear Vendor Management Team,
 
 We hereby formally notify you on behalf of ${companyName} of our decision to terminate our contract entered into under reference ${contractNum}.
 
-In accordance with the applicable notice period under our agreement (${noticeDays}) and relevant European Union consumer and commercial protection principles, our agreement shall definitively end on the contract expiration date of ${contract.endDate || '[Effective Date]'}.
+In accordance with the agreed contractual notice period under our agreement (${noticeDays}) and ${isUS ? 'governing contractual covenants' : 'applicable European commercial protection principles'}, our agreement shall definitively end on the contract expiration date of ${contract.endDate || '[Effective Date]'}.
 
 Stated Reason:
 ${reason}
 
 Accordingly, please ensure that all service deliverables and corresponding recurring billing or direct debit transactions cease immediately upon this date.
+
+This notice is delivered with all rights, claims, remedies, and defenses strictly and expressly reserved.
 
 Please provide formal written confirmation acknowledging receipt of this notice and confirming final closure of our account.
 
@@ -158,7 +176,37 @@ ${signatoryTitle}
 [Official Signature & Seal]`;
     }
 
-    // LEVEL 3 (International / Rest of the World)
+    if (tier.level === 3) {
+      // LEVEL 3 (UK, Canada, OHADA)
+      const isOHADA = tier.jurisdictionCategory === 'UK_CA_OHADA' && companyProfile.country && companyProfile.country !== 'GB' && companyProfile.country !== 'UK' && companyProfile.country !== 'CA';
+      return `${companyName}
+${fullAddress}
+${isOHADA ? `RCCM / NINEA : ${companyProfile.siret || 'N/C'}` : `Company Number / Registration: ${companyProfile.siret || 'N/A'}`}
+Email : ${companyProfile.email || ''}
+
+                                            To / À l'attention de :
+                                            ${contract.vendorName}
+                                            ${contract.cancellationContact?.recipientName || 'Contract / Account Services'}
+                                            ${vendorAddress}
+
+Date : ${todayEn}
+
+SUBJECT / OBJET : CONTRACT TERMINATION NOTICE / NOTIFICATION DE RÉSILIATION - REF #${contractNum}
+
+${isOHADA ? `Madame, Monsieur,\n\nPar la présente, notre société ${companyName} vous notifie formellement la résiliation du contrat n° ${contractNum} à sa date d'échéance contractuelle du ${formatDateFr(contract.endDate)}, en application des stipulations contractuelles et des principes de l'Acte uniforme OHADA portant sur le droit commercial général.` : `Dear Sir/Madam,\n\nPlease accept this letter as formal written notice strictly in accordance with the terms of our agreement that ${companyName} is terminating contract #${contractNum} with ${contract.vendorName}, effective on ${contract.endDate || '[Effective Date]'} following the agreed notice period of ${noticeDays}.`}
+
+${reason}
+
+${isOHADA ? 'Tous droits et recours demeurent expressément réservés.' : 'This notice is given strictly under the contractual terms, with all rights and remedies strictly reserved.'}
+
+${isOHADA ? 'Nous vous prions d\'agréer, Madame, Monsieur, nos salutations distinguées.' : 'Sincerely,'}
+
+${signatoryName}
+${signatoryTitle}
+${companyName}`;
+    }
+
+    // LEVEL 4 (International / Rest of the World)
     return `${companyName}
 ${fullAddress}
 Registration: ${companyProfile.siret || 'N/A'}
@@ -184,6 +232,8 @@ ${reason}
 
 From the effective termination date onwards, please cancel all scheduled services and deactivate any recurring automatic payment authorizations associated with this agreement.
 
+All rights and remedies under the contract are expressly reserved.
+
 Kindly return a signed written acknowledgment confirming receipt of this termination notice and the final settlement of the account.
 
 Respectfully yours,
@@ -193,7 +243,7 @@ ${signatoryTitle}
 ${companyName}
 
 __________________________________________________
-[Notice: This document is formulated on a purely contractual basis. Due to varying local jurisdictional requirements, formal review by a qualified legal professional in your country is strongly recommended before final dispatch.]`;
+[Notice: This document is formulated on a purely factual and contractual basis. Due to varying local jurisdictional requirements, formal review by a qualified legal professional in your country is recommended.]`;
   };
 
   // Generate letter via API
@@ -390,6 +440,27 @@ __________________________________________________
             </select>
           </div>
 
+          {/* French Long-Term Commercial Relationship Risk Alert (Art. L. 442-1 Code de commerce) */}
+          {isLongTermFR && (
+            <div
+              id="french-l442-warning"
+              className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start space-x-2.5"
+            >
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-bold flex items-center space-x-1.5 text-amber-900">
+                  <span>Avertissement Rupture Brutale des Relations Commerciales Établies (Art. L. 442-1 II C. com.)</span>
+                  <span className="px-1.5 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-bold rounded">
+                    Relation ~{relationMonths} mois (&gt; 2 ans)
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Votre relation commerciale avec <strong>{contract.vendorName}</strong> est établie depuis plus de 24 mois. En droit français, un préavis purement contractuel peut être jugé insuffisant par le juge si l'ancienneté exigeait un délai plus long. La lettre ci-dessous a été ajustée pour mentionner la loyauté du préavis et intégrer une clause de réserve de droits.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Letter Preview & Editable Area */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-gray-700">
@@ -445,6 +516,15 @@ __________________________________________________
                 {appliedLegalTier.disclaimer}
               </p>
             </div>
+          </div>
+
+          {/* Permanent Legal Disclaimer Notice */}
+          <div
+            id="permanent-legal-disclaimer"
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[11px] text-gray-500 text-center leading-snug flex items-center justify-center space-x-1.5"
+          >
+            <Scale className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+            <span>{LEGAL_DISCLAIMER_TEXT}</span>
           </div>
         </div>
 

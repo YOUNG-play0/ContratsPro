@@ -7,15 +7,12 @@ import {
   AlertCircle,
   Clock,
   ArrowUpDown,
-  MoreHorizontal,
-  Plus,
   Radio,
   Shield,
   Cloud,
   Zap,
   Wrench,
   FileText,
-  CheckCircle2,
   Calendar,
 } from 'lucide-react';
 import { Contract, ContractCategory, ContractStatus } from '../types';
@@ -30,6 +27,7 @@ import {
   STATUS_CONFIG,
   FREQUENCY_LABELS,
 } from '../utils/contractUtils';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface ContractTableProps {
   contracts: Contract[];
@@ -55,6 +53,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
   onCategoryChange,
   onUpdateStatus,
 }) => {
+  const { t, language } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'all' | 'expiring_30d'>('all');
   const [sortField, setSortField] = useState<SortField>('endDate');
@@ -62,7 +61,6 @@ export const ContractTable: React.FC<ContractTableProps> = ({
 
   // Filter logic
   const filteredContracts = contracts.filter((c) => {
-    // Search query filter
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -71,10 +69,8 @@ export const ContractTable: React.FC<ContractTableProps> = ({
       (c.notes && c.notes.toLowerCase().includes(q)) ||
       (c.summary && c.summary.toLowerCase().includes(q));
 
-    // Category filter
     const matchesCategory = selectedCategory === 'all' || c.category === selectedCategory;
 
-    // Status filter
     let matchesStatus = true;
     if (statusFilter === 'expiring_30d') {
       matchesStatus = isExpiringSoon(c) || isNoticeDeadlineApproaching(c);
@@ -139,6 +135,18 @@ export const ContractTable: React.FC<ContractTableProps> = ({
     }
   };
 
+  const getStatusLabel = (status: ContractStatus) => {
+    return t.statuses[status] || STATUS_CONFIG[status]?.label || status;
+  };
+
+  const getFrequencyLabel = (freq: string) => {
+    if (freq === 'monthly') return language === 'fr' ? 'Mensuel' : 'Monthly';
+    if (freq === 'yearly') return language === 'fr' ? 'Annuel' : 'Yearly';
+    if (freq === 'quarterly') return language === 'fr' ? 'Trimestriel' : 'Quarterly';
+    if (freq === 'biannual') return language === 'fr' ? 'Semestriel' : 'Biannual';
+    return FREQUENCY_LABELS[freq as any] || freq;
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden">
       {/* Search & Filter Header Bar */}
@@ -149,7 +157,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
           <input
             id="input-search-contracts"
             type="text"
-            placeholder="Rechercher par fournisseur, référence, notes..."
+            placeholder={t.contractTable.searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all"
@@ -159,7 +167,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
               onClick={() => setSearchQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600"
             >
-              Effacer
+              {language === 'fr' ? 'Effacer' : 'Clear'}
             </button>
           )}
         </div>
@@ -175,7 +183,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                 : 'text-gray-600 hover:bg-gray-200/60'
             }`}
           >
-            Tous ({contracts.length})
+            {t.common.all} ({contracts.length})
           </button>
           <button
             id="tab-status-active"
@@ -186,7 +194,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                 : 'text-gray-600 hover:bg-gray-200/60'
             }`}
           >
-            Actifs ({contracts.filter((c) => c.status === 'active').length})
+            {t.statuses.active} ({contracts.filter((c) => c.status === 'active').length})
           </button>
           <button
             id="tab-status-watch"
@@ -197,7 +205,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                 : 'text-gray-600 hover:bg-gray-200/60'
             }`}
           >
-            À surveiller ({contracts.filter((c) => c.status === 'watch').length})
+            {t.statuses.watch} ({contracts.filter((c) => c.status === 'watch').length})
           </button>
           <button
             id="tab-status-cancel-pending"
@@ -208,7 +216,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                 : 'text-gray-600 hover:bg-gray-200/60'
             }`}
           >
-            À résilier ({contracts.filter((c) => c.status === 'cancel_pending').length})
+            {t.statuses.cancel_pending} ({contracts.filter((c) => c.status === 'cancel_pending').length})
           </button>
           <button
             id="tab-status-expiring-30d"
@@ -220,7 +228,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
             }`}
           >
             <AlertCircle className="w-3 h-3 text-rose-500" />
-            <span>Échéance &lt; 30j</span>
+            <span>{language === 'fr' ? 'Échéance < 30j' : 'Expiring < 30d'}</span>
           </button>
         </div>
       </div>
@@ -230,81 +238,80 @@ export const ContractTable: React.FC<ContractTableProps> = ({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50/80 border-b border-gray-200/80 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-              {/* 1. Fournisseur */}
+              {/* 1. Provider */}
               <th
                 onClick={() => handleSort('vendorName')}
                 className="py-3.5 px-4 cursor-pointer hover:text-gray-900 transition-colors"
               >
                 <div className="flex items-center space-x-1.5">
-                  <span>Fournisseur</span>
+                  <span>{t.contractTable.tableHeaderContract}</span>
                   <ArrowUpDown className="w-3 h-3 text-gray-400" />
                 </div>
               </th>
 
-              {/* 2. Catégorie */}
+              {/* 2. Category */}
               <th
                 onClick={() => handleSort('category')}
                 className="py-3.5 px-4 cursor-pointer hover:text-gray-900 transition-colors"
               >
                 <div className="flex items-center space-x-1.5">
-                  <span>Catégorie</span>
+                  <span>{t.contractTable.tableHeaderCategory}</span>
                   <ArrowUpDown className="w-3 h-3 text-gray-400" />
                 </div>
               </th>
 
-              {/* 3. Montant */}
+              {/* 3. Amount */}
               <th
                 onClick={() => handleSort('amount')}
                 className="py-3.5 px-4 cursor-pointer hover:text-gray-900 transition-colors text-right"
               >
                 <div className="flex items-center justify-end space-x-1.5">
-                  <span>Montant</span>
+                  <span>{t.contractTable.tableHeaderAmount}</span>
                   <ArrowUpDown className="w-3 h-3 text-gray-400" />
                 </div>
               </th>
 
-              {/* 4. Fréquence */}
+              {/* 4. Frequency */}
               <th className="py-3.5 px-4">
-                <span>Fréquence</span>
+                <span>{t.common.frequency}</span>
               </th>
 
-              {/* 5. Date d'échéance */}
+              {/* 5. Renewal Date */}
               <th
                 onClick={() => handleSort('endDate')}
                 className="py-3.5 px-4 cursor-pointer hover:text-gray-900 transition-colors"
               >
                 <div className="flex items-center space-x-1.5">
-                  <span>Date d'échéance</span>
+                  <span>{t.contractTable.tableHeaderRenewal}</span>
                   <ArrowUpDown className="w-3 h-3 text-gray-400" />
                 </div>
               </th>
 
-              {/* 6. Préavis de résiliation */}
+              {/* 6. Notice Period */}
               <th
                 onClick={() => handleSort('noticePeriodDays')}
                 className="py-3.5 px-4 cursor-pointer hover:text-gray-900 transition-colors"
               >
                 <div className="flex items-center space-x-1.5">
-                  <span>Préavis</span>
+                  <span>{t.contractTable.tableHeaderNotice}</span>
                   <ArrowUpDown className="w-3 h-3 text-gray-400" />
                 </div>
               </th>
 
-              {/* 7. Statut */}
+              {/* 7. Status */}
               <th
                 onClick={() => handleSort('status')}
                 className="py-3.5 px-4 cursor-pointer hover:text-gray-900 transition-colors"
               >
                 <div className="flex items-center space-x-1.5">
-                  <span>Statut</span>
+                  <span>{t.contractTable.tableHeaderStatus}</span>
                   <ArrowUpDown className="w-3 h-3 text-gray-400" />
                 </div>
               </th>
 
               {/* Actions */}
               <th className="py-3.5 px-4 text-right">
-                <span className="sr-only">Actions</span>
-                <span>Actions</span>
+                <span>{t.contractTable.tableHeaderActions}</span>
               </th>
             </tr>
           </thead>
@@ -317,17 +324,19 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                     <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-3">
                       <FileText className="w-6 h-6" />
                     </div>
-                    <p className="text-sm font-medium text-gray-800">Aucun contrat trouvé</p>
+                    <p className="text-sm font-medium text-gray-800">{t.contractTable.emptySearch}</p>
                     <p className="text-xs text-gray-500 mt-1 mb-4">
                       {searchQuery || selectedCategory !== 'all' || statusFilter !== 'all'
-                        ? 'Essayez de modifier vos filtres ou termes de recherche.'
-                        : 'Commencez par ajouter votre premier contrat fournisseur.'}
+                        ? t.contractTable.emptySubtitle
+                        : language === 'fr'
+                        ? 'Commencez par ajouter votre premier contrat fournisseur.'
+                        : 'Start by adding your first vendor contract.'}
                     </p>
                     <button
                       onClick={onOpenAddModal}
-                      className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors"
+                      className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
                     >
-                      Ajouter un contrat
+                      {t.nav.addContract}
                     </button>
                   </div>
                 </td>
@@ -342,6 +351,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
 
                 const categoryConfig = CATEGORY_CONFIG[contract.category] || CATEGORY_CONFIG.autre;
                 const statusConfig = STATUS_CONFIG[contract.status] || STATUS_CONFIG.active;
+                const categoryLabel = t.categories[contract.category] || categoryConfig.label;
 
                 return (
                   <tr
@@ -360,7 +370,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                         <div>
                           <button
                             onClick={() => onSelectContract(contract)}
-                            className="font-medium text-gray-900 hover:text-indigo-600 text-left line-clamp-1 transition-colors"
+                            className="font-medium text-gray-900 hover:text-indigo-600 text-left line-clamp-1 transition-colors cursor-pointer"
                           >
                             {contract.vendorName}
                           </button>
@@ -368,7 +378,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                             <span>{contract.contractNumber || 'Réf. N/A'}</span>
                             {contract.tacitRenewal && (
                               <span className="text-[10px] text-gray-500 bg-gray-100 px-1 rounded">
-                                Tacite
+                                {language === 'fr' ? 'Tacite' : 'Auto-renew'}
                               </span>
                             )}
                           </div>
@@ -382,7 +392,7 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                         className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${categoryConfig.bg} ${categoryConfig.border}`}
                       >
                         {getCategoryIcon(contract.category)}
-                        <span>{categoryConfig.label}</span>
+                        <span>{categoryLabel}</span>
                       </span>
                     </td>
 
@@ -391,13 +401,15 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                       <div className="font-semibold text-gray-900">
                         {formatCurrency(contract.amount, contract.currency)}
                       </div>
-                      <div className="text-[11px] text-gray-400">HT / facturation</div>
+                      <div className="text-[11px] text-gray-400">
+                        {language === 'fr' ? 'HT / période' : 'excl. tax / cycle'}
+                      </div>
                     </td>
 
                     {/* 4. Fréquence */}
                     <td className="py-3.5 px-4 text-gray-600 text-xs">
                       <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">
-                        {FREQUENCY_LABELS[contract.paymentFrequency] || contract.paymentFrequency}
+                        {getFrequencyLabel(contract.paymentFrequency)}
                       </span>
                     </td>
 
@@ -409,19 +421,20 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                           <span>{formatDateFr(contract.endDate)}</span>
                         </div>
 
-                        {/* Visual colored badge if contract expires within 30 days */}
                         {expiringSoon ? (
                           <div className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
                             <AlertCircle className="w-3 h-3 text-rose-600" />
                             <span>
                               {daysUntilEnd <= 0
-                                ? 'Échu !'
-                                : `Échéance dans ${daysUntilEnd}j`}
+                                ? language === 'fr' ? 'Échu !' : 'Expired!'
+                                : language === 'fr'
+                                ? `Échéance dans ${daysUntilEnd}j`
+                                : `Expires in ${daysUntilEnd}d`}
                             </span>
                           </div>
                         ) : (
                           <div className="text-[11px] text-gray-400">
-                            Dans {daysUntilEnd} jours
+                            {language === 'fr' ? `Dans ${daysUntilEnd} jours` : `In ${daysUntilEnd} days`}
                           </div>
                         )}
                       </div>
@@ -431,15 +444,17 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                     <td className="py-3.5 px-4">
                       <div className="flex flex-col space-y-0.5">
                         <div className="text-xs font-semibold text-gray-800">
-                          {contract.noticePeriodDays} jours
+                          {contract.noticePeriodDays} {t.common.days}
                         </div>
                         <div className="text-[11px] text-gray-500 flex items-center space-x-1">
                           <Clock className="w-3 h-3 text-gray-400" />
-                          <span>Limite : {formatDateFr(noticeDeadline)}</span>
+                          <span>{language === 'fr' ? 'Limite :' : 'Cut-off:'} {formatDateFr(noticeDeadline)}</span>
                         </div>
                         {noticeSoon && contract.status !== 'cancelled' && (
                           <span className="text-[10px] text-amber-700 font-medium bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
-                            Préavis sous {daysUntilNotice <= 0 ? '0' : daysUntilNotice}j
+                            {language === 'fr'
+                              ? `Préavis sous ${daysUntilNotice <= 0 ? '0' : daysUntilNotice}j`
+                              : `Notice in ${daysUntilNotice <= 0 ? '0' : daysUntilNotice}d`}
                           </span>
                         )}
                       </div>
@@ -447,12 +462,12 @@ export const ContractTable: React.FC<ContractTableProps> = ({
 
                     {/* 7. Statut */}
                     <td className="py-3.5 px-4">
-                      <div className="relative inline-block text-left group/status">
+                      <div className="relative inline-block text-left">
                         <span
                           className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${statusConfig.badgeBg}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dotBg}`} />
-                          <span>{statusConfig.label}</span>
+                          <span>{getStatusLabel(contract.status)}</span>
                         </span>
                       </div>
                     </td>
@@ -464,8 +479,8 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                         <button
                           id={`btn-view-contract-${contract.id}`}
                           onClick={() => onSelectContract(contract)}
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                          title="Consulter la fiche détaillée"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
+                          title={t.contractTable.btnDetails}
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -474,8 +489,8 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                         <button
                           id={`btn-letter-contract-${contract.id}`}
                           onClick={() => onGenerateLetter(contract)}
-                          className="p-1.5 rounded-lg text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 transition-colors"
-                          title="Générer une lettre de résiliation conforme"
+                          className="p-1.5 rounded-lg text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 transition-colors cursor-pointer"
+                          title={t.contractTable.btnLetter}
                         >
                           <FileSignature className="w-4 h-4" />
                         </button>
@@ -486,14 +501,16 @@ export const ContractTable: React.FC<ContractTableProps> = ({
                           onClick={() => {
                             if (
                               window.confirm(
-                                `Supprimer définitivement le contrat de "${contract.vendorName}" ?`
+                                language === 'fr'
+                                  ? `Supprimer définitivement le contrat de "${contract.vendorName}" ?`
+                                  : `Permanently delete contract for "${contract.vendorName}"?`
                               )
                             ) {
                               onDeleteContract(contract.id);
                             }
                           }}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Supprimer le contrat"
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title={t.contractTable.btnDelete}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -510,13 +527,26 @@ export const ContractTable: React.FC<ContractTableProps> = ({
       {/* Table Footer info */}
       <div className="px-4 py-3 border-t border-gray-200/80 bg-gray-50/50 flex items-center justify-between text-xs text-gray-500">
         <div>
-          Affichage de <span className="font-semibold text-gray-700">{sortedContracts.length}</span> contrat(s)
-          {selectedCategory !== 'all' && ` dans "${CATEGORY_CONFIG[selectedCategory]?.label}"`}
+          {language === 'fr' ? (
+            <>
+              Affichage de <span className="font-semibold text-gray-700">{sortedContracts.length}</span> contrat(s)
+              {selectedCategory !== 'all' && ` dans "${t.categories[selectedCategory] || selectedCategory}"`}
+            </>
+          ) : (
+            <>
+              Showing <span className="font-semibold text-gray-700">{sortedContracts.length}</span> contract(s)
+              {selectedCategory !== 'all' && ` in "${t.categories[selectedCategory] || selectedCategory}"`}
+            </>
+          )}
         </div>
         <div className="flex items-center space-x-3">
           <span className="flex items-center space-x-1">
             <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-            <span>Badge rouge = Échéance &lt; 30 jours</span>
+            <span>
+              {language === 'fr'
+                ? 'Badge rouge = Échéance < 30 jours'
+                : 'Red badge = Expiry < 30 days'}
+            </span>
           </span>
         </div>
       </div>

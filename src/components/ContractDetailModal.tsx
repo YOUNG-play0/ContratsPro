@@ -34,6 +34,7 @@ import {
   STATUS_CONFIG,
   FREQUENCY_LABELS,
 } from '../utils/contractUtils';
+import { calculateRelationshipDurationMonths, isRelationOver24Months } from '../utils/countryUtils';
 
 interface ContractDetailModalProps {
   contract: Contract | null;
@@ -249,6 +250,21 @@ export const ContractDetailModal: React.FC<ContractDetailModalProps> = ({
                     {formatDateFr(contract.startDate)}
                   </span>
                 </div>
+                {contract.relationshipStartDate && (
+                  <div className="flex justify-between py-1 border-b border-gray-100 items-center">
+                    <span className="text-gray-500">Début relation commerciale :</span>
+                    <span className="font-medium text-gray-800 flex items-center space-x-1.5">
+                      <span>{formatDateFr(contract.relationshipStartDate)}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                        calculateRelationshipDurationMonths(contract.relationshipStartDate) >= 24
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {calculateRelationshipDurationMonths(contract.relationshipStartDate)} mois
+                      </span>
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1 border-b border-gray-100">
                   <span className="text-gray-500">Durée d'engagement :</span>
                   <span className="font-medium text-gray-800">

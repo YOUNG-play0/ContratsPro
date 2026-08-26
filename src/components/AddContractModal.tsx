@@ -17,20 +17,24 @@ import {
   ArrowRight,
   FileUp,
 } from 'lucide-react';
-import { Contract, ContractCategory, ContractStatus, PaymentFrequency } from '../types';
+import { CompanyProfile, Contract, ContractCategory, ContractStatus, PaymentFrequency } from '../types';
 import { CATEGORY_CONFIG } from '../utils/contractUtils';
+import { calculateRelationshipDurationMonths, isRelationOver24Months } from '../utils/countryUtils';
 
 interface AddContractModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveContract: (newContract: Contract) => void;
+  companyProfile?: CompanyProfile;
 }
 
 export const AddContractModal: React.FC<AddContractModalProps> = ({
   isOpen,
   onClose,
   onSaveContract,
+  companyProfile,
 }) => {
+  const isFrance = (companyProfile?.country || 'FR').toUpperCase() === 'FR';
   const [activeTab, setActiveTab] = useState<'upload' | 'manual'>('upload');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
@@ -49,6 +53,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
     paymentFrequency: PaymentFrequency;
     signatureDate: string;
     startDate: string;
+    relationshipStartDate: string;
     commitmentDurationMonths: number;
     endDate: string;
     noticePeriodDays: number;
@@ -70,6 +75,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
     paymentFrequency: 'mensuel',
     signatureDate: new Date().toISOString().split('T')[0],
     startDate: new Date().toISOString().split('T')[0],
+    relationshipStartDate: new Date().toISOString().split('T')[0],
     commitmentDurationMonths: 12,
     endDate: (() => {
       const d = new Date();
@@ -169,6 +175,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
         paymentFrequency: (ext.paymentFrequency as PaymentFrequency) || 'mensuel',
         signatureDate: ext.signatureDate || new Date().toISOString().split('T')[0],
         startDate: ext.startDate || ext.signatureDate || new Date().toISOString().split('T')[0],
+        relationshipStartDate: ext.relationshipStartDate || ext.startDate || ext.signatureDate || new Date().toISOString().split('T')[0],
         commitmentDurationMonths: Number(ext.commitmentDurationMonths) || 12,
         endDate: ext.endDate || '',
         noticePeriodDays: Number(ext.noticePeriodDays) || 30,
@@ -206,6 +213,11 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
       return;
     }
 
+    if (isFrance && !formData.relationshipStartDate) {
+      setExtractionError("La date de début de relation commerciale est obligatoire en France (évaluation de l'article L. 442-1 du Code de commerce).");
+      return;
+    }
+
     const newContract: Contract = {
       id: `ctr-${Date.now()}`,
       vendorName: formData.vendorName.trim(),
@@ -216,6 +228,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
       paymentFrequency: formData.paymentFrequency,
       signatureDate: formData.signatureDate || undefined,
       startDate: formData.startDate || undefined,
+      relationshipStartDate: isFrance ? (formData.relationshipStartDate || undefined) : (formData.relationshipStartDate || undefined),
       commitmentDurationMonths: Number(formData.commitmentDurationMonths) || undefined,
       endDate: formData.endDate,
       noticePeriodDays: Number(formData.noticePeriodDays) || 30,
@@ -655,6 +668,48 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* CHAMP OBLIGATOIRE POUR LA FRANCE : Date de début de relation commerciale (L. 442-1) */}
+                {isFrance && (
+                  <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <label htmlFor="input-relationship-start-date" className="text-xs font-bold text-blue-950 flex items-center space-x-1.5">
+                        <Shield className="w-3.5 h-3.5 text-blue-700" />
+                        <span>Date de début de la relation commerciale (France) *</span>
+                      </label>
+                      {formData.relationshipStartDate && (
+                        <span className="text-[11px] font-semibold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md">
+                          Ancienneté : {calculateRelationshipDurationMonths(formData.relationshipStartDate)} mois
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                      <div className="sm:col-span-1">
+                        <input
+                          id="input-relationship-start-date"
+                          type="date"
+                          required={isFrance}
+                          value={formData.relationshipStartDate}
+                          onChange={(e) =>
+                            setFormData({ ...formData, relationshipStartDate: e.target.value })
+                          }
+                          className="w-full px-3 py-2 text-xs border border-blue-300 bg-white rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none font-semibold text-gray-900"
+                        />
+                      </div>
+                      <div className="sm:col-span-2 text-[11px] text-blue-800 leading-relaxed">
+                        Date initiale de votre premier contrat ou commande avec ce fournisseur (peut être antérieure au contrat actuel). Indispensable pour évaluer le risque de rupture brutale (art. L. 442-1 Code de commerce).
+                      </div>
+                    </div>
+                    {formData.relationshipStartDate && calculateRelationshipDurationMonths(formData.relationshipStartDate) >= 24 && (
+                      <div className="mt-1 p-2 bg-amber-100/80 border border-amber-300 text-amber-900 rounded-lg text-[11px] flex items-center space-x-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span>
+                          <strong>Attention (Art. L. 442-1 II C. com.) :</strong> Relation établie depuis plus de 24 mois ({calculateRelationshipDurationMonths(formData.relationshipStartDate)} mois). L'IA adaptera le préavis et formulera des réserves pour prévenir tout grief de rupture brutale.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Reconduction tacite Checkbox */}
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">

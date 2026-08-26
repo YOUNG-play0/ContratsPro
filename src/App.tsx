@@ -21,11 +21,49 @@ import { ContractDetailModal } from './components/ContractDetailModal';
 import { LetterGeneratorModal } from './components/LetterGeneratorModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
 import { EarlyAccessBanner } from './components/EarlyAccessBanner';
+import { LandingPage } from './components/LandingPage';
+import appLogo from './assets/images/app_logo_1787718358200.jpg';
+import { useLanguage } from './i18n/LanguageContext';
 
 const CONTRACTS_STORAGE_KEY = 'b2b_contracts_app_data_v2';
 const PROFILE_STORAGE_KEY = 'b2b_company_profile_data_v2';
 
 export default function App() {
+  const { t, language } = useLanguage();
+  // Routing state based on browser pathname
+  const [currentRoute, setCurrentRoute] = useState<string>(() => {
+    const pathname = window.location.pathname;
+    if (pathname === '/app' || pathname === '/dashboard') {
+      return '/app';
+    }
+    return '/';
+  });
+
+  // Listen to browser back/forward history navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const pathname = window.location.pathname;
+      if (pathname === '/app' || pathname === '/dashboard') {
+        setCurrentRoute('/app');
+      } else {
+        setCurrentRoute('/');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateTo = (path: string) => {
+    try {
+      window.history.pushState({}, '', path);
+    } catch {
+      // Fallback for sandboxed frames if pushState restricted
+    }
+    setCurrentRoute(path === '/app' || path === '/dashboard' ? '/app' : '/');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Contracts State
   const [contracts, setContracts] = useState<Contract[]>(() => {
     try {
@@ -196,6 +234,12 @@ export default function App() {
     setSelectedContractForLetter(contract);
   };
 
+  // If route is root "/", render the public Landing Page
+  if (currentRoute === '/') {
+    return <LandingPage onNavigateToApp={() => navigateTo('/app')} />;
+  }
+
+  // Otherwise, render the main /app or /dashboard B2B workspace
   return (
     <div className="min-h-screen bg-[#F9FAFB] text-gray-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* Top Navigation Bar */}
@@ -206,6 +250,7 @@ export default function App() {
         setActiveView={setActiveView}
         onOpenAddModal={() => setIsAddModalOpen(true)}
         onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
+        onNavigateToLanding={() => navigateTo('/')}
       />
 
       {/* Main Content Area */}
@@ -250,16 +295,28 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white py-4 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-3">
-          <div className="flex items-center space-x-2.5">
-            <img src="/logo.jpg" alt="Logo" className="w-5 h-5 rounded object-contain border border-gray-200" />
-            <span className="font-semibold text-gray-800">ContratsPro B2B</span>
+      <footer className="border-t border-gray-200 bg-white py-5 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-4">
+          <div className="flex items-center space-x-3">
+            <img src={appLogo} alt="Logo" className="w-8 h-8 rounded-lg object-contain border border-gray-200 shadow-xs" />
+            <span className="font-bold text-sm text-gray-800">ContratsPro B2B</span>
             <span>•</span>
-            <span>Gestion de contrats fournisseurs &amp; conformité juridique française</span>
+            <span>Solea LLC</span>
+            <span>•</span>
+            <button
+              id="footer-back-to-landing-btn"
+              onClick={() => navigateTo('/')}
+              className="text-indigo-600 hover:text-indigo-800 font-medium hover:underline cursor-pointer"
+            >
+              {t.nav.home}
+            </button>
           </div>
           <div className="flex items-center space-x-3 text-gray-400">
-            <span>Loi Châtel &bull; Loi Hamon &bull; Code civil &bull; LRAR</span>
+            <span>
+              {language === 'fr'
+                ? 'Loi Châtel • Loi Hamon • Code civil • LRAR'
+                : 'Commercial Law • Contract Notices • Smart Tracking'}
+            </span>
           </div>
         </div>
       </footer>
@@ -270,6 +327,7 @@ export default function App() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSaveContract={handleSaveContract}
+        companyProfile={companyProfile}
       />
 
       {/* 2. Contract Detail Sheet Modal */}

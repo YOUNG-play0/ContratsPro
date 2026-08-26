@@ -95,21 +95,28 @@ export const CompanySettingsModal: React.FC<CompanySettingsModalProps> = ({
               onChange={(e) => setForm({ ...form, country: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none text-gray-900 bg-white font-medium"
             >
-              <optgroup label="Niveau 1 — France (Droit positif & Loi Châtel)">
+              <optgroup label="Niveau 1 — France (Droit positif, Code civil, Loi Châtel & L. 442-1)">
                 {COUNTRIES_LIST.filter((c) => c.region === 'france').map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.name} ({c.code})
                   </option>
                 ))}
               </optgroup>
-              <optgroup label="Niveau 2 — Union Européenne (Prudence juridique UE)">
-                {COUNTRIES_LIST.filter((c) => c.region === 'eu').map((c) => (
+              <optgroup label="Niveau 2 — Union Européenne & États-Unis (Prudence juridique)">
+                {COUNTRIES_LIST.filter((c) => c.region === 'eu_us').map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.name} ({c.code})
                   </option>
                 ))}
               </optgroup>
-              <optgroup label="Niveau 3 — International & Autres pays">
+              <optgroup label="Niveau 3 — Royaume-Uni, Canada & Espace OHADA (Afrique)">
+                {COUNTRIES_LIST.filter((c) => c.region === 'uk_ca_ohada').map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Niveau 4 — Reste du Monde & International (Minimaliste factuel)">
                 {COUNTRIES_LIST.filter((c) => c.region === 'world').map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.name} ({c.code})

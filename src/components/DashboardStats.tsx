@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   Clock,
   TrendingUp,
-  ShieldAlert,
   ArrowUpRight,
   Filter,
 } from 'lucide-react';
@@ -17,6 +16,7 @@ import {
   isNoticeDeadlineApproaching,
   CATEGORY_CONFIG,
 } from '../utils/contractUtils';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface DashboardStatsProps {
   contracts: Contract[];
@@ -31,18 +31,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   selectedCategory,
   onNavigateToAlerts,
 }) => {
+  const { t, language } = useLanguage();
+
   const activeContracts = contracts.filter((c) => c.status !== 'cancelled');
   const watchContracts = contracts.filter((c) => c.status === 'watch');
   const cancelPendingContracts = contracts.filter((c) => c.status === 'cancel_pending');
 
   const expiringSoonList = contracts.filter((c) => isExpiringSoon(c));
   const noticeDeadlineSoonList = contracts.filter((c) => isNoticeDeadlineApproaching(c));
-
-  // Combined urgent alerts count (distinct)
-  const urgentAlertsCount = new Set([
-    ...expiringSoonList.map((c) => c.id),
-    ...noticeDeadlineSoonList.map((c) => c.id),
-  ]).size;
 
   const totalMonthlySpend = activeContracts.reduce(
     (acc, curr) => acc + getMonthlyEquivalent(curr.amount, curr.paymentFrequency),
@@ -58,14 +54,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     <div className="space-y-6">
       {/* 4 Top KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Contrats */}
+        {/* Total Contracts */}
         <div
           id="stat-card-total"
           className="bg-white rounded-xl border border-gray-200/80 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all hover:border-gray-300"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Contrats référencés
+              {t.stats.activeContracts}
             </span>
             <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700">
               <FileText className="w-4 h-4" />
@@ -74,13 +70,15 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
           <div className="mt-3 flex items-baseline justify-between">
             <div className="text-2xl font-bold text-gray-900">{contracts.length}</div>
             <span className="text-xs text-gray-500 font-medium">
-              {activeContracts.length} actifs
+              {activeContracts.length} {t.statuses.active.toLowerCase()}
             </span>
           </div>
           <div className="mt-2 text-xs text-gray-500 flex items-center space-x-2">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
             <span>
-              {watchContracts.length} à surveiller, {cancelPendingContracts.length} à résilier
+              {language === 'fr'
+                ? `${watchContracts.length} à surveiller, ${cancelPendingContracts.length} en résiliation`
+                : `${watchContracts.length} under review, ${cancelPendingContracts.length} cancelling`}
             </span>
           </div>
         </div>
@@ -92,7 +90,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Dépense annuelle estimée
+              {t.stats.annualBudget}
             </span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
               <TrendingUp className="w-4 h-4" />
@@ -104,7 +102,9 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             </div>
           </div>
           <div className="mt-2 text-xs text-gray-500">
-            Soit ~ <span className="font-semibold text-gray-700">{formatCurrency(totalMonthlySpend)}</span> / mois
+            {language === 'fr' ? 'Soit ~ ' : 'Equivalent to ~ '}
+            <span className="font-semibold text-gray-700">{formatCurrency(totalMonthlySpend)}</span>
+            {language === 'fr' ? ' / mois' : ' / month'}
           </div>
         </div>
 
@@ -120,7 +120,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Échéance &lt; 30 jours
+              {language === 'fr' ? 'Échéance < 30 jours' : 'Expiring < 30 days'}
             </span>
             <div
               className={`w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -142,14 +142,19 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             </div>
             {expiringSoonList.length > 0 && (
               <span className="text-xs font-medium text-rose-600 flex items-center">
-                Action requise <ArrowUpRight className="w-3 h-3 ml-0.5" />
+                {language === 'fr' ? 'Action requise' : 'Action required'}{' '}
+                <ArrowUpRight className="w-3 h-3 ml-0.5" />
               </span>
             )}
           </div>
           <div className="mt-2 text-xs text-gray-500">
             {expiringSoonList.length > 0
-              ? 'Contrats arrivant à leur terme sous 30j'
-              : 'Aucun contrat en fin de terme immédiate'}
+              ? language === 'fr'
+                ? 'Contrats arrivant à leur terme sous 30j'
+                : 'Contracts reaching term in < 30 days'
+              : language === 'fr'
+              ? 'Aucun contrat en fin de terme immédiate'
+              : 'No contracts reaching immediate term'}
           </div>
         </div>
 
@@ -165,7 +170,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Préavis limite &lt; 30 jours
+              {language === 'fr' ? 'Préavis limite < 30 jours' : 'Notice Cut-off < 30 days'}
             </span>
             <div
               className={`w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -187,12 +192,15 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             </div>
             {noticeDeadlineSoonList.length > 0 && (
               <span className="text-xs font-medium text-amber-700 flex items-center">
-                Délai limite <ArrowUpRight className="w-3 h-3 ml-0.5" />
+                {language === 'fr' ? 'Délai critique' : 'Critical cut-off'}{' '}
+                <ArrowUpRight className="w-3 h-3 ml-0.5" />
               </span>
             )}
           </div>
           <div className="mt-2 text-xs text-gray-500">
-            Risque de reconduction tacite automatique
+            {language === 'fr'
+              ? 'Risque de reconduction tacite automatique'
+              : 'Auto-renewal lock-in risk'}
           </div>
         </div>
       </div>
@@ -202,7 +210,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center space-x-2 text-xs font-medium text-gray-500">
             <Filter className="w-3.5 h-3.5" />
-            <span>Filtrer par catégorie :</span>
+            <span>{t.stats.filterByCategory} :</span>
           </div>
 
           <div className="flex items-center flex-wrap gap-1.5">
@@ -215,13 +223,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              Tous ({contracts.length})
+              {t.common.all} ({contracts.length})
             </button>
 
             {(Object.keys(CATEGORY_CONFIG) as ContractCategory[]).map((catKey) => {
               const catConfig = CATEGORY_CONFIG[catKey];
               const count = contracts.filter((c) => c.category === catKey).length;
               const isSelected = selectedCategory === catKey;
+              const categoryLabel = t.categories[catKey] || catConfig.label;
 
               return (
                 <button
@@ -234,7 +243,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                       : `${catConfig.bg} ${catConfig.border} hover:opacity-90`
                   }`}
                 >
-                  <span>{catConfig.label}</span>
+                  <span>{categoryLabel}</span>
                   <span
                     className={`text-[10px] px-1 py-0.2 rounded-full font-bold ${
                       isSelected

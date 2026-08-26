@@ -2,14 +2,10 @@ import React from 'react';
 import {
   AlertTriangle,
   Clock,
-  Calendar,
   FileSignature,
   Eye,
-  ShieldAlert,
-  ArrowRight,
   CheckCircle2,
   BellRing,
-  AlertCircle,
 } from 'lucide-react';
 import { Contract } from '../types';
 import {
@@ -22,6 +18,7 @@ import {
   CATEGORY_CONFIG,
   STATUS_CONFIG,
 } from '../utils/contractUtils';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface ContractAlertsProps {
   contracts: Contract[];
@@ -36,13 +33,11 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
   onGenerateLetter,
   onBackToDashboard,
 }) => {
-  // Contrats dont l'échéance arrive sous 30 jours
-  const expiringContracts = contracts.filter((c) => isExpiringSoon(c));
+  const { t, language } = useLanguage();
 
-  // Contrats dont le préavis arrive sous 30 jours (ou dépassé)
+  const expiringContracts = contracts.filter((c) => isExpiringSoon(c));
   const noticeDeadlineContracts = contracts.filter((c) => isNoticeDeadlineApproaching(c));
 
-  // Unique combined list of contracts with any alert < 30 days
   const allAlertContractIds = new Set([
     ...expiringContracts.map((c) => c.id),
     ...noticeDeadlineContracts.map((c) => c.id),
@@ -57,22 +52,29 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
         <div>
           <div className="flex items-center space-x-2 text-amber-400 text-xs font-semibold uppercase tracking-wider mb-1">
             <BellRing className="w-4 h-4" />
-            <span>Surveillance des échéances &amp; préavis</span>
+            <span>
+              {language === 'fr'
+                ? 'Surveillance des échéances & préavis'
+                : 'Renewal & Notice Monitoring'}
+            </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-            Contrats fournisseurs nécessitant une décision (&lt; 30 jours)
+            {language === 'fr'
+              ? 'Contrats fournisseurs nécessitant une décision (< 30 jours)'
+              : 'Vendor Contracts Requiring Immediate Decision (< 30 days)'}
           </h2>
           <p className="text-gray-300 text-xs sm:text-sm mt-1 max-w-2xl">
-            Cette section surveille en temps réel les dates d'échéance et les délais limites
-            d'envoi de préavis pour éviter toute reconduction tacite involontaire.
+            {language === 'fr'
+              ? 'Cette section surveille en temps réel les dates d’échéance et les délais limites d’envoi de préavis pour éviter toute reconduction tacite involontaire.'
+              : 'Real-time monitoring of renewal cut-offs and notice deadlines to prevent automatic contract lock-in.'}
           </p>
         </div>
 
         <button
           onClick={onBackToDashboard}
-          className="self-start md:self-center px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-medium border border-white/20 transition-colors whitespace-nowrap"
+          className="self-start md:self-center px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-medium border border-white/20 transition-colors whitespace-nowrap cursor-pointer"
         >
-          Retour au tableau de bord
+          {language === 'fr' ? 'Retour au tableau de bord' : 'Back to Dashboard'}
         </button>
       </div>
 
@@ -83,18 +85,16 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <h3 className="text-lg font-bold text-gray-900">
-            Aucun contrat n'arrive à échéance sous 30 jours
+            {t.alertsView.noAlerts}
           </h3>
           <p className="text-sm text-gray-500 max-w-md mx-auto mt-1 mb-6">
-            Tous vos contrats fournisseurs sont sous contrôle. Vous recevrez une alerte
-            automatique dès qu'une date de préavis ou d'échéance entrera dans la fenêtre des 30
-            jours.
+            {t.alertsView.noAlertsDesc}
           </p>
           <button
             onClick={onBackToDashboard}
-            className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer"
           >
-            Consulter tous les contrats
+            {language === 'fr' ? 'Consulter tous les contrats' : 'View all contracts'}
           </button>
         </div>
       ) : (
@@ -107,10 +107,12 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
               </div>
               <div>
                 <div className="text-xl font-bold text-rose-900">
-                  {expiringContracts.length} contrat(s)
+                  {expiringContracts.length} {t.stats.contractsCount}
                 </div>
                 <div className="text-xs text-rose-700 font-medium">
-                  Échéance contractuelle finale &lt; 30 jours
+                  {language === 'fr'
+                    ? 'Échéance contractuelle finale < 30 jours'
+                    : 'Final contract expiry < 30 days'}
                 </div>
               </div>
             </div>
@@ -121,10 +123,12 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
               </div>
               <div>
                 <div className="text-xl font-bold text-amber-900">
-                  {noticeDeadlineContracts.length} contrat(s)
+                  {noticeDeadlineContracts.length} {t.stats.contractsCount}
                 </div>
                 <div className="text-xs text-amber-800 font-medium">
-                  Date limite d'envoi de préavis &lt; 30 jours (risque tacite reconduction)
+                  {language === 'fr'
+                    ? 'Date limite d’envoi de préavis < 30 jours (risque tacite)'
+                    : 'Notice cut-off deadline < 30 days (auto-renewal risk)'}
                 </div>
               </div>
             </div>
@@ -144,6 +148,8 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                 CATEGORY_CONFIG[contract.category] || CATEGORY_CONFIG.autre;
               const statusConfig =
                 STATUS_CONFIG[contract.status] || STATUS_CONFIG.active;
+              const categoryLabel = t.categories[contract.category] || categoryConfig.label;
+              const statusLabel = t.statuses[contract.status] || statusConfig.label;
 
               return (
                 <div
@@ -170,24 +176,24 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                         <span
                           className={`text-xs px-2.5 py-0.5 rounded-md font-medium border ${categoryConfig.bg} ${categoryConfig.border}`}
                         >
-                          {categoryConfig.label}
+                          {categoryLabel}
                         </span>
                         <span
                           className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${statusConfig.badgeBg}`}
                         >
-                          {statusConfig.label}
+                          {statusLabel}
                         </span>
                         {contract.tacitRenewal && (
                           <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                            Reconduction tacite active
+                            {language === 'fr' ? 'Reconduction tacite active' : 'Auto-renewal active'}
                           </span>
                         )}
                       </div>
 
                       <div className="text-xs text-gray-500 flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span>Réf : {contract.contractNumber || 'Non renseigné'}</span>
+                        <span>{language === 'fr' ? 'Réf :' : 'Ref:'} {contract.contractNumber || 'N/A'}</span>
                         <span>
-                          Montant :{' '}
+                          {t.common.amount} :{' '}
                           <strong className="text-gray-700">
                             {formatCurrency(contract.amount, contract.currency)}
                           </strong>{' '}
@@ -195,7 +201,7 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                         </span>
                         {contract.cancellationContact?.address && (
                           <span className="truncate max-w-xs">
-                            Adresse résiliation : {contract.cancellationContact.address}
+                            {language === 'fr' ? 'Adresse résiliation :' : 'Notice Address:'} {contract.cancellationContact.address}
                           </span>
                         )}
                       </div>
@@ -212,7 +218,7 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                       {/* Expiration date */}
                       <div className="text-center px-2">
                         <div className="text-[10px] uppercase font-bold text-gray-400">
-                          Échéance finale
+                          {language === 'fr' ? 'Échéance finale' : 'Renewal / End'}
                         </div>
                         <div className="text-sm font-bold text-gray-900">
                           {formatDateFr(contract.endDate)}
@@ -227,8 +233,10 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                           }`}
                         >
                           {daysToEnd <= 0
-                            ? 'Échu aujourd’hui !'
-                            : `Dans ${daysToEnd} jour(s)`}
+                            ? language === 'fr' ? 'Échu !' : 'Expired!'
+                            : language === 'fr'
+                            ? `Dans ${daysToEnd} jour(s)`
+                            : `In ${daysToEnd} day(s)`}
                         </div>
                       </div>
 
@@ -237,7 +245,9 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                       {/* Notice deadline */}
                       <div className="text-center px-2">
                         <div className="text-[10px] uppercase font-bold text-gray-400">
-                          Délai préavis ({contract.noticePeriodDays}j)
+                          {language === 'fr'
+                            ? `Délai préavis (${contract.noticePeriodDays}j)`
+                            : `Notice (${contract.noticePeriodDays}d)`}
                         </div>
                         <div className="text-sm font-bold text-amber-900">
                           {formatDateFr(noticeDate)}
@@ -252,8 +262,10 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                           }`}
                         >
                           {daysToNotice <= 0
-                            ? 'Préavis dépassé !'
-                            : `Reste ${daysToNotice} jour(s)`}
+                            ? language === 'fr' ? 'Préavis dépassé !' : 'Notice deadline passed!'
+                            : language === 'fr'
+                            ? `Reste ${daysToNotice} jour(s)`
+                            : `${daysToNotice} day(s) left`}
                         </div>
                       </div>
                     </div>
@@ -262,18 +274,18 @@ export const ContractAlerts: React.FC<ContractAlertsProps> = ({
                     <div className="flex items-center space-x-2 shrink-0 self-end lg:self-center">
                       <button
                         onClick={() => onSelectContract(contract)}
-                        className="px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium transition-colors flex items-center space-x-1.5"
+                        className="px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium transition-colors flex items-center space-x-1.5 cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5 text-gray-400" />
-                        <span>Fiche détail</span>
+                        <span>{t.contractTable.btnDetails}</span>
                       </button>
 
                       <button
                         onClick={() => onGenerateLetter(contract)}
-                        className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow-xs flex items-center space-x-1.5"
+                        className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow-xs flex items-center space-x-1.5 cursor-pointer"
                       >
                         <FileSignature className="w-3.5 h-3.5 text-indigo-200" />
-                        <span>Générer lettre de résiliation</span>
+                        <span>{t.contractTable.btnLetter}</span>
                       </button>
                     </div>
                   </div>
