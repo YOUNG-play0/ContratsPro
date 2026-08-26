@@ -187,29 +187,29 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
         throw new Error(data.error || 'Impossible d’extraire les informations du contrat.');
       }
 
-      const ext = data.extractedData;
+      const ext = data.extractedData || data.data || data || {};
       setFormData({
-        vendorName: ext.vendorName || '',
-        contractNumber: ext.contractNumber || '',
-        category: (ext.category as ContractCategory) || 'telecom',
-        amount: Number(ext.amount) || 0,
-        currency: ext.currency || 'EUR',
-        paymentFrequency: (ext.paymentFrequency as PaymentFrequency) || 'mensuel',
-        signatureDate: ext.signatureDate || new Date().toISOString().split('T')[0],
-        startDate: ext.startDate || new Date().toISOString().split('T')[0],
+        vendorName: ext?.vendorName || '',
+        contractNumber: ext?.contractNumber || '',
+        category: (ext?.category as ContractCategory) || 'telecom',
+        amount: Number(ext?.amount) || 0,
+        currency: ext?.currency || 'EUR',
+        paymentFrequency: (ext?.paymentFrequency as PaymentFrequency) || 'mensuel',
+        signatureDate: ext?.signatureDate || new Date().toISOString().split('T')[0],
+        startDate: ext?.startDate || new Date().toISOString().split('T')[0],
         relationshipStartDate:
-          ext.relationshipStartDate || ext.startDate || new Date().toISOString().split('T')[0],
-        commitmentDurationMonths: Number(ext.commitmentDurationMonths) || 12,
-        endDate: ext.endDate || '',
-        noticePeriodDays: Number(ext.noticePeriodDays) || 30,
-        tacitRenewal: ext.tacitRenewal !== undefined ? Boolean(ext.tacitRenewal) : true,
-        cancellationRecipient: ext.cancellationContact?.recipientName || 'Service Résiliation',
-        cancellationAddress: ext.cancellationContact?.address || '',
-        cancellationEmail: ext.cancellationContact?.email || '',
-        cancellationPhone: ext.cancellationContact?.phone || '',
-        keyClauses: Array.isArray(ext.keyClauses) ? ext.keyClauses : [],
-        summary: ext.summary || '',
-        status: (ext.suggestedStatus as ContractStatus) || 'active',
+          ext?.relationshipStartDate || ext?.startDate || new Date().toISOString().split('T')[0],
+        commitmentDurationMonths: Number(ext?.commitmentDurationMonths) || 12,
+        endDate: ext?.endDate || '',
+        noticePeriodDays: Number(ext?.noticePeriodDays) || 30,
+        tacitRenewal: ext?.tacitRenewal !== undefined ? Boolean(ext.tacitRenewal) : true,
+        cancellationRecipient: ext?.cancellationContact?.recipientName || 'Service Résiliation',
+        cancellationAddress: ext?.cancellationContact?.address || '',
+        cancellationEmail: ext?.cancellationContact?.email || '',
+        cancellationPhone: ext?.cancellationContact?.phone || '',
+        keyClauses: Array.isArray(ext?.keyClauses) ? ext.keyClauses : [],
+        summary: ext?.summary || '',
+        status: (ext?.suggestedStatus as ContractStatus) || 'active',
         notes: '',
       });
 

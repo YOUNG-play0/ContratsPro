@@ -169,6 +169,7 @@ Renvoie UNIQUEMENT un objet JSON valide avec cette structure exacte :
     res.json({
       success: true,
       data: parsedJson,
+      extractedData: parsedJson,
     });
   } catch (error: any) {
     console.error('Error extracting contract:', error);
