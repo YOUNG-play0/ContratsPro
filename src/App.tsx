@@ -8,28 +8,39 @@ import {
   CheckCircle,
   AlertTriangle,
   FileCheck,
+  FileSignature,
 } from 'lucide-react';
-import { CompanyProfile, Contract, ContractCategory, ContractStatus } from './types';
+import {
+  CompanyProfile,
+  Contract,
+  ContractCategory,
+  ContractStatus,
+  GeneratedLetter,
+  LetterStatus,
+} from './types';
 import { INITIAL_CONTRACTS, DEFAULT_COMPANY_PROFILE } from './data/initialContracts';
 import { isExpiringSoon, isNoticeDeadlineApproaching } from './utils/contractUtils';
 import { Navbar } from './components/Navbar';
 import { DashboardStats } from './components/DashboardStats';
 import { ContractTable } from './components/ContractTable';
 import { ContractAlerts } from './components/ContractAlerts';
+import { LetterHistory } from './components/LetterHistory';
 import { AddContractModal } from './components/AddContractModal';
 import { ContractDetailModal } from './components/ContractDetailModal';
 import { LetterGeneratorModal } from './components/LetterGeneratorModal';
 import { CompanySettingsModal } from './components/CompanySettingsModal';
 import { EarlyAccessBanner } from './components/EarlyAccessBanner';
 import { LandingPage } from './components/LandingPage';
-import appLogo from './assets/images/app_logo_1787718358200.jpg';
+import { AppLogo } from './components/AppLogo';
 import { useLanguage } from './i18n/LanguageContext';
 
 const CONTRACTS_STORAGE_KEY = 'b2b_contracts_app_data_v2';
 const PROFILE_STORAGE_KEY = 'b2b_company_profile_data_v2';
+const LETTERS_STORAGE_KEY = 'b2b_letters_history_data_v2';
 
 export default function App() {
   const { t, language } = useLanguage();
+
   // Routing state based on browser pathname
   const [currentRoute, setCurrentRoute] = useState<string>(() => {
     const pathname = window.location.pathname;
@@ -90,8 +101,21 @@ export default function App() {
     return DEFAULT_COMPANY_PROFILE;
   });
 
+  // Generated Letters History State
+  const [letterHistory, setLetterHistory] = useState<GeneratedLetter[]>(() => {
+    try {
+      const saved = localStorage.getItem(LETTERS_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Error loading letters history from localStorage:', e);
+    }
+    return [];
+  });
+
   // Navigation & UI State
-  const [activeView, setActiveView] = useState<'dashboard' | 'alerts'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'alerts' | 'history'>('dashboard');
   const [selectedCategory, setSelectedCategory] = useState<ContractCategory | 'all'>('all');
 
   // Modals State
@@ -121,6 +145,14 @@ export default function App() {
     }
   }, [companyProfile]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(LETTERS_STORAGE_KEY, JSON.stringify(letterHistory));
+    } catch (e) {
+      console.error('Error saving letters history to localStorage:', e);
+    }
+  }, [letterHistory]);
+
   // Keep selected contract in sync if updated
   useEffect(() => {
     if (selectedContractForDetail) {
@@ -137,8 +169,23 @@ export default function App() {
   ).length;
 
   // Handlers
-  const handleSaveContract = (newContract: Contract) => {
+  const handleSaveContract = (newContract: Contract, generatedLetterText?: string) => {
     setContracts((prev) => [newContract, ...prev]);
+
+    if (generatedLetterText && generatedLetterText.trim().length > 0) {
+      const newLetter: GeneratedLetter = {
+        id: `let-${Date.now()}`,
+        contractId: newContract.id,
+        vendorName: newContract.vendorName,
+        contractNumber: newContract.contractNumber,
+        category: newContract.category,
+        generatedAt: new Date().toISOString(),
+        letterContent: generatedLetterText,
+        status: 'generated',
+        recipientAddress: newContract.cancellationContact?.address,
+      };
+      setLetterHistory((prev) => [newLetter, ...prev]);
+    }
   };
 
   const handleUpdateStatus = (contractId: string, status: ContractStatus) => {
@@ -206,6 +253,8 @@ export default function App() {
   };
 
   const handleLetterGenerated = (contractId: string, letterText: string) => {
+    const targetContract = contracts.find((c) => c.id === contractId);
+
     setContracts((prev) =>
       prev.map((c) => {
         if (c.id === contractId) {
@@ -228,6 +277,41 @@ export default function App() {
         return c;
       })
     );
+
+    // Also add or update in letterHistory
+    if (targetContract) {
+      const newLetter: GeneratedLetter = {
+        id: `let-${Date.now()}`,
+        contractId: targetContract.id,
+        vendorName: targetContract.vendorName,
+        contractNumber: targetContract.contractNumber,
+        category: targetContract.category,
+        generatedAt: new Date().toISOString(),
+        letterContent: letterText,
+        status: 'generated',
+        recipientAddress: targetContract.cancellationContact?.address,
+      };
+      setLetterHistory((prev) => [newLetter, ...prev]);
+    }
+  };
+
+  const handleUpdateLetterStatus = (letterId: string, status: LetterStatus) => {
+    setLetterHistory((prev) =>
+      prev.map((l) => {
+        if (l.id === letterId) {
+          return {
+            ...l,
+            status,
+            sentAt: status === 'sent' ? new Date().toISOString() : undefined,
+          };
+        }
+        return l;
+      })
+    );
+  };
+
+  const handleDeleteLetter = (letterId: string) => {
+    setLetterHistory((prev) => prev.filter((l) => l.id !== letterId));
   };
 
   const handleOpenLetterGenerator = (contract: Contract) => {
@@ -261,7 +345,7 @@ export default function App() {
           contractsCount={contracts.length}
         />
 
-        {activeView === 'dashboard' ? (
+        {activeView === 'dashboard' && (
           <>
             {/* Dashboard KPI Stats & Filters */}
             <DashboardStats
@@ -283,7 +367,9 @@ export default function App() {
               onUpdateStatus={handleUpdateStatus}
             />
           </>
-        ) : (
+        )}
+
+        {activeView === 'alerts' && (
           /* Dedicated Alerts View (< 30 days) */
           <ContractAlerts
             contracts={contracts}
@@ -292,13 +378,26 @@ export default function App() {
             onBackToDashboard={() => setActiveView('dashboard')}
           />
         )}
+
+        {activeView === 'history' && (
+          /* Dedicated Letters History View */
+          <LetterHistory
+            letters={letterHistory}
+            onUpdateLetterStatus={handleUpdateLetterStatus}
+            onDeleteLetter={handleDeleteLetter}
+            onOpenAddModal={() => setIsAddModalOpen(true)}
+            onNavigateToDashboard={() => setActiveView('dashboard')}
+          />
+        )}
       </main>
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white py-5 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-4">
           <div className="flex items-center space-x-3">
-            <img src={appLogo} alt="Logo" className="w-8 h-8 rounded-lg object-contain border border-gray-200 shadow-xs" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-gray-200 shadow-2xs">
+              <AppLogo className="w-full h-full" />
+            </div>
             <span className="font-bold text-sm text-gray-800">ContratsPro B2B</span>
             <span>•</span>
             <span>Solea LLC</span>

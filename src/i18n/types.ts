@@ -124,6 +124,7 @@ export interface Translations {
     home: string;
     dashboard: string;
     alerts: string;
+    history: string;
     addContract: string;
     companySettings: string;
     waitlistBannerTitle: string;

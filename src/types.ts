@@ -85,3 +85,20 @@ export interface ContractStats {
   totalMonthlySpend: number;
   totalAnnualSpend: number;
 }
+
+export type LetterStatus = 'generated' | 'sent';
+
+export interface GeneratedLetter {
+  id: string;
+  contractId?: string;
+  vendorName: string;
+  contractNumber?: string;
+  category?: ContractCategory;
+  generatedAt: string;
+  letterContent: string;
+  status: LetterStatus;
+  sentAt?: string;
+  recipientAddress?: string;
+  reason?: string;
+  notes?: string;
+}

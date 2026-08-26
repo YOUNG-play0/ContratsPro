@@ -4,16 +4,17 @@ import {
   Bell,
   Building2,
   SlidersHorizontal,
+  FileSignature,
 } from 'lucide-react';
 import { CompanyProfile } from '../types';
-import appLogo from '../assets/images/app_logo_1787718358200.jpg';
+import { AppLogo } from './AppLogo';
 import { useLanguage, LanguageSelector } from '../i18n/LanguageContext';
 
 interface NavbarProps {
   companyProfile: CompanyProfile;
   alertCount: number;
-  activeView: 'dashboard' | 'alerts';
-  setActiveView: (view: 'dashboard' | 'alerts') => void;
+  activeView: 'dashboard' | 'alerts' | 'history';
+  setActiveView: (view: 'dashboard' | 'alerts' | 'history') => void;
   onOpenAddModal: () => void;
   onOpenCompanyModal: () => void;
   onNavigateToLanding?: () => void;
@@ -42,12 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => setActiveView('dashboard')}
             >
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shadow-xs border border-gray-200/90 bg-white flex items-center justify-center p-1 group-hover:scale-105 group-hover:shadow-md transition-all duration-200 shrink-0">
-                <img
-                  src={appLogo}
-                  alt="ContratsPro Logo"
-                  className="w-full h-full object-contain rounded-xl"
-                  referrerPolicy="no-referrer"
-                />
+                <AppLogo className="w-full h-full" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
@@ -102,6 +98,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 )}
               </button>
+              <button
+                id="nav-tab-history"
+                onClick={() => setActiveView('history')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                  activeView === 'history'
+                    ? 'bg-indigo-50 text-indigo-900 font-semibold border border-indigo-200/60'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <FileSignature className="w-3.5 h-3.5" />
+                <span>{t.nav.history}</span>
+              </button>
             </nav>
           </div>
 
@@ -148,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="btn-add-contract-main"
               onClick={onOpenAddModal}
-              className="inline-flex items-center space-x-2 px-3.5 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs sm:text-sm font-medium rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2"
+              className="inline-flex items-center space-x-2 px-3.5 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs sm:text-sm font-medium rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 cursor-pointer"
             >
               <Plus className="w-4 h-4 text-indigo-100" />
               <span>{t.nav.addContract}</span>
@@ -159,3 +167,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

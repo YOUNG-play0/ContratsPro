@@ -18,7 +18,7 @@ import {
   Check,
   ExternalLink,
 } from 'lucide-react';
-import appLogo from '../assets/images/app_logo_1787718358200.jpg';
+import { AppLogo } from './AppLogo';
 import { useLanguage, LanguageSelector } from '../i18n/LanguageContext';
 
 interface LandingPageProps {
@@ -104,12 +104,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToApp }) => 
             {/* Brand Logo */}
             <div className="flex items-center space-x-3.5">
               <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl overflow-hidden shadow-xs border border-slate-200 bg-white flex items-center justify-center p-0.5 shrink-0">
-                <img
-                  src={appLogo}
-                  alt="ContratsPro Logo"
-                  className="w-full h-full object-contain rounded-lg"
-                  referrerPolicy="no-referrer"
-                />
+                <AppLogo className="w-full h-full" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
@@ -500,11 +495,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToApp }) => 
             {/* Left: Brand & Legal mention */}
             <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 text-center sm:text-left">
               <div className="flex items-center space-x-2.5">
-                <img
-                  src={appLogo}
-                  alt="ContratsPro"
-                  className="w-7 h-7 rounded-lg object-contain border border-slate-200"
-                />
+                <div className="w-7 h-7 rounded-lg overflow-hidden border border-slate-200">
+                  <AppLogo className="w-full h-full" />
+                </div>
                 <span className="font-extrabold text-slate-900 text-sm">{t.landing.footerBrand}</span>
               </div>
               <span className="hidden sm:inline text-slate-300">&bull;</span>

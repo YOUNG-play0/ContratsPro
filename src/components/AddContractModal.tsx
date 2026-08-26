@@ -16,15 +16,24 @@ import {
   Layers,
   ArrowRight,
   FileUp,
+  FileSignature,
+  Download,
+  Copy,
+  ArrowLeft,
+  CheckCircle2,
+  MailCheck,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { CompanyProfile, Contract, ContractCategory, ContractStatus, PaymentFrequency } from '../types';
-import { CATEGORY_CONFIG } from '../utils/contractUtils';
+import { CATEGORY_CONFIG, formatDateFr } from '../utils/contractUtils';
 import { calculateRelationshipDurationMonths, isRelationOver24Months } from '../utils/countryUtils';
+import { requestAiOrFallbackLetter, buildLocalFallbackLetter } from '../utils/letterGenerator';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AddContractModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveContract: (newContract: Contract) => void;
+  onSaveContract: (newContract: Contract, generatedLetterText?: string) => void;
   companyProfile?: CompanyProfile;
 }
 
@@ -34,7 +43,9 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
   onSaveContract,
   companyProfile,
 }) => {
+  const { language } = useLanguage();
   const isFrance = (companyProfile?.country || 'FR').toUpperCase() === 'FR';
+
   const [activeTab, setActiveTab] = useState<'upload' | 'manual'>('upload');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string | null>(null);
@@ -42,6 +53,15 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const [isExtracted, setIsExtracted] = useState(false);
+
+  // Sub-step for letter generation: 'verify' (form) or 'letter_preview'
+  const [step, setStep] = useState<'verify' | 'letter_preview'>('verify');
+  const [isGeneratingLetter, setIsGeneratingLetter] = useState(false);
+  const [generatedLetterText, setGeneratedLetterText] = useState('');
+  const [letterReason, setLetterReason] = useState(
+    "Résiliation à l'échéance contractuelle annuelle avec respect du délai de préavis."
+  );
+  const [copiedLetter, setCopiedLetter] = useState(false);
 
   // Form State (for verification & manual entry)
   const [formData, setFormData] = useState<{
@@ -148,7 +168,11 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
           fileName: 'contrat_saisi.txt',
         };
       } else {
-        throw new Error('Veuillez sélectionner un fichier ou renseigner le texte du contrat.');
+        throw new Error(
+          language === 'fr'
+            ? 'Veuillez sélectionner un fichier ou renseigner le texte du contrat.'
+            : 'Please select a file or paste contract text.'
+        );
       }
 
       const res = await fetch('/api/extract-contract', {
@@ -160,22 +184,21 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Échec de l'extraction par l'IA.");
+        throw new Error(data.error || 'Impossible d’extraire les informations du contrat.');
       }
 
-      const ext = data.data || data;
-
-      // Populate form with extracted data
+      const ext = data.extractedData;
       setFormData({
         vendorName: ext.vendorName || '',
         contractNumber: ext.contractNumber || '',
-        category: (ext.category as ContractCategory) || 'autre',
+        category: (ext.category as ContractCategory) || 'telecom',
         amount: Number(ext.amount) || 0,
         currency: ext.currency || 'EUR',
         paymentFrequency: (ext.paymentFrequency as PaymentFrequency) || 'mensuel',
         signatureDate: ext.signatureDate || new Date().toISOString().split('T')[0],
-        startDate: ext.startDate || ext.signatureDate || new Date().toISOString().split('T')[0],
-        relationshipStartDate: ext.relationshipStartDate || ext.startDate || ext.signatureDate || new Date().toISOString().split('T')[0],
+        startDate: ext.startDate || new Date().toISOString().split('T')[0],
+        relationshipStartDate:
+          ext.relationshipStartDate || ext.startDate || new Date().toISOString().split('T')[0],
         commitmentDurationMonths: Number(ext.commitmentDurationMonths) || 12,
         endDate: ext.endDate || '',
         noticePeriodDays: Number(ext.noticePeriodDays) || 30,
@@ -191,6 +214,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
       });
 
       setIsExtracted(true);
+      setStep('verify');
     } catch (err: any) {
       console.error(err);
       setExtractionError(err.message || "Erreur lors de l'extraction des données.");
@@ -199,26 +223,34 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
     }
   };
 
-  // Submit and Save
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const validateFormData = (): boolean => {
     if (!formData.vendorName.trim()) {
-      setExtractionError('Le nom du fournisseur est obligatoire.');
-      return;
+      setExtractionError(
+        language === 'fr' ? 'Le nom du fournisseur est obligatoire.' : 'Vendor name is required.'
+      );
+      return false;
     }
 
     if (!formData.endDate) {
-      setExtractionError("La date d'échéance est obligatoire.");
-      return;
+      setExtractionError(
+        language === 'fr' ? "La date d'échéance est obligatoire." : 'End date is required.'
+      );
+      return false;
     }
 
     if (isFrance && !formData.relationshipStartDate) {
-      setExtractionError("La date de début de relation commerciale est obligatoire en France (évaluation de l'article L. 442-1 du Code de commerce).");
-      return;
+      setExtractionError(
+        "La date de début de relation commerciale est obligatoire en France (évaluation de l'article L. 442-1 du Code de commerce)."
+      );
+      return false;
     }
 
-    const newContract: Contract = {
+    setExtractionError(null);
+    return true;
+  };
+
+  const buildContractObject = (): Contract => {
+    return {
       id: `ctr-${Date.now()}`,
       vendorName: formData.vendorName.trim(),
       contractNumber: formData.contractNumber.trim() || undefined,
@@ -228,7 +260,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
       paymentFrequency: formData.paymentFrequency,
       signatureDate: formData.signatureDate || undefined,
       startDate: formData.startDate || undefined,
-      relationshipStartDate: isFrance ? (formData.relationshipStartDate || undefined) : (formData.relationshipStartDate || undefined),
+      relationshipStartDate: formData.relationshipStartDate || undefined,
       commitmentDurationMonths: Number(formData.commitmentDurationMonths) || undefined,
       endDate: formData.endDate,
       noticePeriodDays: Number(formData.noticePeriodDays) || 30,
@@ -244,7 +276,9 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
       status: formData.status,
       notes: formData.notes || undefined,
       attachedFileName: selectedFile?.name || (isExtracted ? 'Contrat_Extrait_IA.pdf' : undefined),
-      attachedFileSize: selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} Mo` : undefined,
+      attachedFileSize: selectedFile
+        ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} Mo`
+        : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       actions: [
@@ -258,266 +292,383 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
         },
       ],
     };
+  };
 
+  // 1. Save Contract Directly without Letter
+  const handleSaveWithoutLetter = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateFormData()) return;
+
+    const newContract = buildContractObject();
     onSaveContract(newContract);
     onClose();
   };
 
+  // 2. Generate Letter Step
+  const handleStartLetterGeneration = async () => {
+    if (!validateFormData()) return;
+
+    setIsGeneratingLetter(true);
+    setExtractionError(null);
+
+    const tempContract = buildContractObject();
+
+    try {
+      const letterText = await requestAiOrFallbackLetter({
+        contract: tempContract,
+        companyProfile,
+        reason: letterReason,
+      });
+
+      setGeneratedLetterText(letterText);
+      setStep('letter_preview');
+    } catch (err: any) {
+      console.warn('Letter generation fallback:', err);
+      const fallback = buildLocalFallbackLetter({
+        contract: tempContract,
+        companyProfile,
+        reason: letterReason,
+      });
+      setGeneratedLetterText(fallback);
+      setStep('letter_preview');
+    } finally {
+      setIsGeneratingLetter(false);
+    }
+  };
+
+  // 3. Finalize Save (Contract + Letter) in one click
+  const handleSaveContractAndLetter = () => {
+    if (!validateFormData()) return;
+
+    const newContract = buildContractObject();
+    newContract.lastGeneratedLetter = generatedLetterText;
+    newContract.status = newContract.status === 'active' ? 'cancel_pending' : newContract.status;
+    newContract.actions = [
+      ...(newContract.actions || []),
+      {
+        id: `act-${Date.now() + 1}`,
+        date: new Date().toISOString(),
+        type: 'letter_generated',
+        description: 'Lettre de résiliation formelle générée dès la création du contrat.',
+      },
+    ];
+
+    onSaveContract(newContract, generatedLetterText);
+    onClose();
+  };
+
+  const handleCopyLetter = () => {
+    navigator.clipboard.writeText(generatedLetterText);
+    setCopiedLetter(true);
+    setTimeout(() => setCopiedLetter(false), 2000);
+  };
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+
+    const margin = 20;
+    const pageWidth = 210;
+    const maxLineWidth = pageWidth - margin * 2;
+
+    const lines = doc.splitTextToSize(generatedLetterText, maxLineWidth);
+
+    let cursorY = 25;
+    const lineHeight = 5.2;
+
+    lines.forEach((line: string) => {
+      if (cursorY > 275) {
+        doc.addPage();
+        cursorY = 25;
+      }
+      doc.text(line, margin, cursorY);
+      cursorY += lineHeight;
+    });
+
+    const safeVendor = (formData.vendorName || 'fournisseur')
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .toLowerCase();
+    doc.save(`Lettre_Resiliation_${safeVendor}.pdf`);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6">
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200/80 flex items-center justify-between bg-gray-50/60">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden">
+        {/* Modal Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center text-white shadow-xs">
-              <FileUp className="w-5 h-5 text-indigo-400" />
+            <div className="w-10 h-10 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center border border-indigo-100 font-bold">
+              {step === 'letter_preview' ? (
+                <FileSignature className="w-5 h-5" />
+              ) : isExtracted ? (
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+              ) : (
+                <Upload className="w-5 h-5" />
+              )}
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                Ajouter un nouveau contrat fournisseur
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">
+                {step === 'letter_preview'
+                  ? language === 'fr'
+                    ? 'Lettre de résiliation prête'
+                    : 'Termination Letter Ready'
+                  : isExtracted
+                  ? language === 'fr'
+                    ? 'Vérification des données extraites'
+                    : 'Verify Extracted Contract Data'
+                  : language === 'fr'
+                  ? 'Ajouter & Analyser un contrat B2B'
+                  : 'Add & Analyze B2B Contract'}
               </h2>
               <p className="text-xs text-gray-500">
-                Extraction automatique par IA ou saisie manuelle
+                {step === 'letter_preview'
+                  ? language === 'fr'
+                    ? 'Aperçu du courrier officiel à notifier au fournisseur'
+                    : 'Review formal notice to be sent to the vendor'
+                  : isExtracted
+                  ? language === 'fr'
+                    ? 'Vérifiez les dates, montants et coordonnées avant validation'
+                    : 'Review dates, amounts and termination details before saving'
+                  : language === 'fr'
+                  ? 'Importez un document (PDF/Image) pour extraction automatique par IA'
+                  : 'Upload PDF or paste document for instant AI extraction'}
               </p>
             </div>
           </div>
+
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body with scrolling */}
+        {/* Modal Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* Method Selector Tabs if not extracted yet */}
-          {!isExtracted && (
-            <div className="flex items-center space-x-2 border-b border-gray-200 pb-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab('upload')}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-2 ${
-                  activeTab === 'upload'
-                    ? 'bg-gray-900 text-white shadow-xs'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload Fichier ou Texte (Analyse IA)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('manual');
-                  setIsExtracted(true);
-                }}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-2 ${
-                  activeTab === 'manual'
-                    ? 'bg-gray-900 text-white shadow-xs'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Saisie 100% Manuelle</span>
-              </button>
-            </div>
-          )}
-
-          {/* TAB 1: File Upload / Drag & Drop */}
-          {!isExtracted && activeTab === 'upload' && (
-            <div className="space-y-4">
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                className="border-2 border-dashed border-gray-300 hover:border-gray-400 rounded-2xl p-8 text-center bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer relative"
-              >
-                <input
-                  type="file"
-                  id="file-upload-input"
-                  accept=".pdf,.png,.jpg,.jpeg,.txt"
-                  onChange={handleFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3 border border-indigo-100">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <h3 className="text-sm font-bold text-gray-800">
-                  Glissez-déposez votre contrat ici
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Formats acceptés : PDF, PNG, JPG, JPEG ou texte (max 20 Mo)
-                </p>
-                <div className="mt-4">
-                  <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-200 text-gray-700 shadow-xs">
-                    Parcourir les fichiers
-                  </span>
-                </div>
-              </div>
-
-              {selectedFile && (
-                <div className="flex items-center justify-between p-3.5 bg-indigo-50/60 border border-indigo-200 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <FileText className="w-5 h-5 text-indigo-600" />
-                    <div>
-                      <div className="text-xs font-bold text-indigo-950 truncate max-w-sm">
-                        {selectedFile.name}
-                      </div>
-                      <div className="text-[11px] text-indigo-700">
-                        {(selectedFile.size / 1024).toFixed(0)} Ko
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => runAiExtraction()}
-                    disabled={isExtracting}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center space-x-1.5"
-                  >
-                    {isExtracting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Analyse IA en cours...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        <span>Extraire les données via IA</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Paste raw text alternative */}
-              <div className="pt-2">
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Ou collez directement le texte du contrat ci-dessous :
-                </label>
-                <textarea
-                  rows={4}
-                  value={pastedText}
-                  onChange={(e) => setPastedText(e.target.value)}
-                  placeholder="Copiez-collez ici le texte des clauses ou conditions particulières de votre contrat..."
-                  className="w-full p-3 text-xs border border-gray-200 rounded-xl font-mono focus:ring-2 focus:ring-indigo-600 focus:outline-none"
-                />
-                {pastedText.trim().length > 20 && !selectedFile && (
-                  <button
-                    type="button"
-                    onClick={() => runAiExtraction()}
-                    disabled={isExtracting}
-                    className="mt-2 px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center space-x-1.5"
-                  >
-                    {isExtracting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Extraction IA en cours...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 text-indigo-200" />
-                        <span>Analyser le texte avec l'IA</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* AI Processing Banner */}
-          {isExtracting && (
-            <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
-              <div className="text-sm font-bold text-gray-900">
-                Extraction intelligente des données contractuelles...
-              </div>
-              <p className="text-xs text-gray-500 max-w-sm mx-auto">
-                L'IA analyse le fournisseur, le montant, la périodicité, le préavis légal,
-                la tacite reconduction et les contacts de résiliation.
-              </p>
-            </div>
-          )}
-
-          {/* Error Message */}
           {extractionError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2.5 text-xs text-rose-700">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
               <span>{extractionError}</span>
             </div>
           )}
 
-          {/* EDITABLE FORM (Step 3: Verification & Modification before save) */}
-          {isExtracted && (
-            <form id="form-save-contract" onSubmit={handleSave} className="space-y-6">
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
-                <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-800">
-                  <Check className="w-4 h-4 text-emerald-600" />
+          {/* STEP 1: Upload / Input Screen */}
+          {!isExtracted && step === 'verify' && (
+            <div className="space-y-6">
+              {/* Tab selector */}
+              <div className="flex border-b border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('upload')}
+                  className={`pb-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer flex items-center space-x-2 ${
+                    activeTab === 'upload'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Upload className="w-4 h-4" />
                   <span>
-                    Données extraites par l'IA. Vérifiez et ajustez les champs avant
-                    l'enregistrement :
+                    {language === 'fr'
+                      ? 'Importer un document (PDF / Image)'
+                      : 'Upload Document (PDF / Image)'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('manual')}
+                  className={`pb-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer flex items-center space-x-2 ${
+                    activeTab === 'manual'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>
+                    {language === 'fr'
+                      ? 'Coller le texte du contrat'
+                      : 'Paste Contract Text'}
+                  </span>
+                </button>
+              </div>
+
+              {activeTab === 'upload' ? (
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  className="border-2 border-dashed border-gray-300 hover:border-indigo-500 rounded-2xl p-8 text-center transition-colors bg-gray-50/50 flex flex-col items-center justify-center space-y-3 cursor-pointer"
+                  onClick={() => document.getElementById('contract-file-upload')?.click()}
+                >
+                  <input
+                    id="contract-file-upload"
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shadow-2xs">
+                    <FileUp className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {selectedFile
+                        ? selectedFile.name
+                        : language === 'fr'
+                        ? 'Cliquez pour sélectionner ou glissez-déposez votre contrat'
+                        : 'Click to select or drag and drop your contract'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      PDF, JPG ou PNG (Conditions Générales, Bon de commande, Facture avec engagement)
+                    </p>
+                  </div>
+
+                  {selectedFile && (
+                    <div className="inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>
+                        {language === 'fr' ? 'Fichier prêt' : 'File ready'} (
+                        {(selectedFile.size / 1024 / 1024).toFixed(2)} Mo)
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    {language === 'fr'
+                      ? 'Collez le texte brut du contrat ou des clauses :'
+                      : 'Paste raw contract text or clauses:'}
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                    placeholder={
+                      language === 'fr'
+                        ? 'Ex: Contrat de téléphonie souscrit le 15/01/2023 pour une durée initiale de 24 mois. Préavis de 3 mois par LRAR...'
+                        : 'Ex: Telecom agreement signed Jan 15, 2023 with 24 months initial term. 3 months notice...'
+                    }
+                    className="w-full p-3 text-xs border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:outline-none font-mono"
+                  />
+                </div>
+              )}
+
+              {/* Action Button to trigger extraction */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExtracted(true);
+                    setStep('verify');
+                  }}
+                  className="text-xs text-gray-500 hover:text-indigo-600 font-medium underline cursor-pointer"
+                >
+                  {language === 'fr'
+                    ? 'Saisir manuellement sans extraction IA'
+                    : 'Enter manually without AI extraction'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExtracting || (!selectedFile && !pastedText.trim())}
+                  onClick={() => runAiExtraction()}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  {isExtracting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>
+                        {language === 'fr'
+                          ? 'Extraction des clauses en cours...'
+                          : 'Extracting clauses with AI...'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-indigo-200" />
+                      <span>
+                        {language === 'fr'
+                          ? 'Analyser & Extraire avec IA'
+                          : 'Analyze & Extract with AI'}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: Verification Form (Fields Extracted) */}
+          {isExtracted && step === 'verify' && (
+            <form id="form-save-contract" onSubmit={handleSaveWithoutLetter} className="space-y-6">
+              <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="text-xs font-semibold text-indigo-900">
+                    {language === 'fr'
+                      ? 'Clauses et dates clés extraites'
+                      : 'Extracted key clauses & dates'}
                   </span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsExtracted(false)}
-                  className="text-xs text-emerald-700 hover:text-emerald-900 underline font-medium"
+                  onClick={() => {
+                    setIsExtracted(false);
+                    setSelectedFile(null);
+                    setFileBase64(null);
+                  }}
+                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
                 >
-                  Réessayer avec un autre fichier
+                  {language === 'fr' ? 'Changer de document' : 'Change document'}
                 </button>
               </div>
 
               {/* Section 1: Informations Générales */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 pb-1">
-                  1. Identification du Fournisseur &amp; Catégorie
+                  1. Informations Générales du Prestataire
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* Fournisseur */}
-                  <div className="sm:col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Nom du Fournisseur / Prestataire *
+                      Nom du fournisseur *
                     </label>
                     <input
-                      id="input-vendor-name"
                       type="text"
                       required
                       value={formData.vendorName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, vendorName: e.target.value })
-                      }
-                      placeholder="Ex: Orange Business Services, Alan, HubSpot..."
+                      onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                      placeholder="Ex: Orange Business, Canon France, AXA..."
                       className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     />
                   </div>
 
-                  {/* Numéro de contrat */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      N° / Réf. Contrat
+                      Numéro de contrat / Référence client
                     </label>
                     <input
-                      id="input-contract-number"
                       type="text"
                       value={formData.contractNumber}
-                      onChange={(e) =>
-                        setFormData({ ...formData, contractNumber: e.target.value })
-                      }
-                      placeholder="Ex: B2B-2025-001"
+                      onChange={(e) => setFormData({ ...formData, contractNumber: e.target.value })}
+                      placeholder="Ex: CLI-89420 / CTR-2023"
                       className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     />
                   </div>
 
-                  {/* Catégorie */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Catégorie *
+                      Catégorie de dépense
                     </label>
                     <select
-                      id="select-category"
                       value={formData.category}
                       onChange={(e) =>
                         setFormData({
@@ -527,196 +678,110 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
                       }
                       className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none bg-white"
                     >
-                      {Object.keys(CATEGORY_CONFIG).map((cat) => (
-                        <option key={cat} value={cat}>
-                          {CATEGORY_CONFIG[cat as ContractCategory].label}
+                      {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+                        <option key={key} value={key}>
+                          {cfg.label}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Montant */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Montant (€ HT ou TTC) *
+                      Montant &amp; Fréquence
                     </label>
-                    <div className="relative">
+                    <div className="flex space-x-2">
                       <input
-                        id="input-amount"
                         type="number"
-                        step="0.01"
-                        required
+                        min="0"
+                        step="any"
                         value={formData.amount}
                         onChange={(e) =>
                           setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })
                         }
-                        className="w-full px-3 py-2 pr-8 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none font-semibold text-gray-900"
+                        className="w-2/3 px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-bold">
-                        €
-                      </span>
+                      <select
+                        value={formData.paymentFrequency}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            paymentFrequency: e.target.value as PaymentFrequency,
+                          })
+                        }
+                        className="w-1/3 px-2 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none bg-white font-medium"
+                      >
+                        <option value="mensuel">€ / mois</option>
+                        <option value="annuel">€ / an</option>
+                        <option value="trimestriel">€ / trim</option>
+                      </select>
                     </div>
-                  </div>
-
-                  {/* Fréquence de paiement */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Fréquence de paiement *
-                    </label>
-                    <select
-                      id="select-frequency"
-                      value={formData.paymentFrequency}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          paymentFrequency: e.target.value as PaymentFrequency,
-                        })
-                      }
-                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none bg-white"
-                    >
-                      <option value="mensuel">Mensuel</option>
-                      <option value="trimestriel">Trimestriel</option>
-                      <option value="annuel">Annuel</option>
-                      <option value="ponctuel">Ponctuel</option>
-                      <option value="autre">Autre</option>
-                    </select>
                   </div>
                 </div>
               </div>
 
-              {/* Section 2: Dates, Durée, Préavis & Tacite reconduction */}
+              {/* Section 2: Dates & Échéances */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 pb-1">
-                  2. Calendrier, Échéance &amp; Conditions de Résiliation
+                  2. Calendrier, Préavis &amp; Reconduction
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  {/* Date d'échéance */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-rose-700 mb-1">
-                      Date d'échéance finale *
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Début collaboration commerciale {isFrance && <span className="text-rose-500 font-bold">*</span>}
                     </label>
                     <input
-                      id="input-end-date"
                       type="date"
-                      required
-                      value={formData.endDate}
+                      value={formData.relationshipStartDate}
                       onChange={(e) =>
-                        setFormData({ ...formData, endDate: e.target.value })
+                        setFormData({
+                          ...formData,
+                          relationshipStartDate: e.target.value,
+                        })
                       }
-                      className="w-full px-3 py-2 text-xs border border-rose-300 bg-rose-50/30 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none font-semibold"
+                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     />
                   </div>
 
-                  {/* Préavis de résiliation en jours */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Préavis de résiliation (jours) *
+                      Date d'échéance contractuelle *
                     </label>
                     <input
-                      id="input-notice-days"
-                      type="number"
-                      min={0}
-                      max={365}
+                      type="date"
                       required
+                      value={formData.endDate}
+                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                      className="w-full px-3 py-2 text-xs border border-indigo-300 bg-indigo-50/30 font-bold text-indigo-900 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Délai de préavis requis (jours)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
                       value={formData.noticePeriodDays}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          noticePeriodDays: parseInt(e.target.value) || 0,
+                          noticePeriodDays: parseInt(e.target.value, 10) || 0,
                         })
                       }
                       placeholder="Ex: 30, 60, 90"
                       className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
                     />
                   </div>
-
-                  {/* Date de signature */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Date de signature
-                    </label>
-                    <input
-                      id="input-signature-date"
-                      type="date"
-                      value={formData.signatureDate}
-                      onChange={(e) =>
-                        setFormData({ ...formData, signatureDate: e.target.value })
-                      }
-                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Durée d'engagement (mois) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Engagement (mois)
-                    </label>
-                    <input
-                      id="input-commitment-months"
-                      type="number"
-                      min={0}
-                      value={formData.commitmentDurationMonths}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          commitmentDurationMonths: parseInt(e.target.value) || 0,
-                        })
-                      }
-                      placeholder="Ex: 12, 24, 36"
-                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
-                    />
-                  </div>
                 </div>
 
-                {/* CHAMP OBLIGATOIRE POUR LA FRANCE : Date de début de relation commerciale (L. 442-1) */}
-                {isFrance && (
-                  <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <label htmlFor="input-relationship-start-date" className="text-xs font-bold text-blue-950 flex items-center space-x-1.5">
-                        <Shield className="w-3.5 h-3.5 text-blue-700" />
-                        <span>Date de début de la relation commerciale (France) *</span>
-                      </label>
-                      {formData.relationshipStartDate && (
-                        <span className="text-[11px] font-semibold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md">
-                          Ancienneté : {calculateRelationshipDurationMonths(formData.relationshipStartDate)} mois
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                      <div className="sm:col-span-1">
-                        <input
-                          id="input-relationship-start-date"
-                          type="date"
-                          required={isFrance}
-                          value={formData.relationshipStartDate}
-                          onChange={(e) =>
-                            setFormData({ ...formData, relationshipStartDate: e.target.value })
-                          }
-                          className="w-full px-3 py-2 text-xs border border-blue-300 bg-white rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none font-semibold text-gray-900"
-                        />
-                      </div>
-                      <div className="sm:col-span-2 text-[11px] text-blue-800 leading-relaxed">
-                        Date initiale de votre premier contrat ou commande avec ce fournisseur (peut être antérieure au contrat actuel). Indispensable pour évaluer le risque de rupture brutale (art. L. 442-1 Code de commerce).
-                      </div>
-                    </div>
-                    {formData.relationshipStartDate && calculateRelationshipDurationMonths(formData.relationshipStartDate) >= 24 && (
-                      <div className="mt-1 p-2 bg-amber-100/80 border border-amber-300 text-amber-900 rounded-lg text-[11px] flex items-center space-x-1.5">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                        <span>
-                          <strong>Attention (Art. L. 442-1 II C. com.) :</strong> Relation établie depuis plus de 24 mois ({calculateRelationshipDurationMonths(formData.relationshipStartDate)} mois). L'IA adaptera le préavis et formulera des réserves pour prévenir tout grief de rupture brutale.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Reconduction tacite Checkbox */}
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200/80">
                   <div>
-                    <div className="text-xs font-bold text-gray-800">
+                    <span className="text-xs font-bold text-gray-900 block">
                       Reconduction tacite automatique
-                    </div>
+                    </span>
                     <div className="text-[11px] text-gray-500">
                       Le contrat se renouvelle-t-il automatiquement sans dénonciation ?
                     </div>
@@ -724,7 +789,6 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
-                      id="checkbox-tacit-renewal"
                       checked={formData.tacitRenewal}
                       onChange={(e) =>
                         setFormData({ ...formData, tacitRenewal: e.target.checked })
@@ -778,7 +842,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
 
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Adresse postale complète (pour envoi LRAR)
+                      Adresse postale complète (pour LRAR)
                     </label>
                     <input
                       type="text"
@@ -792,71 +856,165 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
                   </div>
                 </div>
               </div>
+            </form>
+          )}
 
-              {/* Section 4: Statut & Synthèse */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 pb-1">
-                  4. Statut &amp; Notes
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Statut initial
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          status: e.target.value as ContractStatus,
-                        })
-                      }
-                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none bg-white font-medium"
-                    >
-                      <option value="active">Actif (en cours de validité)</option>
-                      <option value="watch">À surveiller (décision proche)</option>
-                      <option value="cancel_pending">À résilier (action requise)</option>
-                    </select>
+          {/* STEP 3: Generated Letter Preview Screen */}
+          {step === 'letter_preview' && (
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Success Banner */}
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
                   </div>
-
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Notes internes
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.notes}
-                      onChange={(e) =>
-                        setFormData({ ...formData, notes: e.target.value })
-                      }
-                      placeholder="Ex: Demander devis concurrent avant le 15..."
-                      className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:outline-none"
-                    />
+                    <h4 className="text-xs font-bold text-emerald-950">
+                      {language === 'fr'
+                        ? 'Lettre formelle rédigée avec succès'
+                        : 'Formal termination letter generated'}
+                    </h4>
+                    <p className="text-[11px] text-emerald-800">
+                      {language === 'fr'
+                        ? `Prête pour ${formData.vendorName} • Échéance : ${formatDateFr(formData.endDate)}`
+                        : `Ready for ${formData.vendorName} • Expiration: ${formatDateFr(formData.endDate)}`}
+                    </p>
                   </div>
                 </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyLetter}
+                    className="px-3 py-1.5 bg-white border border-emerald-300 text-emerald-800 rounded-lg text-xs font-semibold hover:bg-emerald-100 flex items-center space-x-1 cursor-pointer"
+                  >
+                    {copiedLetter ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{language === 'fr' ? 'Copié !' : 'Copied!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>{language === 'fr' ? 'Copier' : 'Copy'}</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadPDF}
+                    className="px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-semibold hover:bg-emerald-800 flex items-center space-x-1 cursor-pointer shadow-2xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>PDF</span>
+                  </button>
+                </div>
               </div>
-            </form>
+
+              {/* Letter Text Preview & Editor */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  {language === 'fr'
+                    ? 'Contenu de la lettre formelle (modifiable) :'
+                    : 'Letter text content (editable):'}
+                </label>
+                <textarea
+                  rows={14}
+                  value={generatedLetterText}
+                  onChange={(e) => setGeneratedLetterText(e.target.value)}
+                  className="w-full p-4 text-xs border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-600 focus:outline-none font-mono leading-relaxed bg-white shadow-2xs"
+                />
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-gray-200/80 bg-gray-50/60 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            Annuler
-          </button>
-
-          {isExtracted && (
+        {/* Modal Footer Actions */}
+        <div className="px-6 py-4 border-t border-gray-200/80 bg-gray-50/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Left Action */}
+          {step === 'letter_preview' ? (
             <button
-              type="submit"
-              form="form-save-contract"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all focus:ring-2 focus:ring-indigo-600"
+              type="button"
+              onClick={() => setStep('verify')}
+              className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-200/60 transition-colors flex items-center space-x-1.5 cursor-pointer"
             >
-              Enregistrer le contrat dans le tableau de bord
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>
+                {language === 'fr' ? 'Modifier les champs' : 'Back to fields'}
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-200/60 transition-colors cursor-pointer"
+            >
+              {language === 'fr' ? 'Annuler' : 'Cancel'}
+            </button>
+          )}
+
+          {/* Right Action Buttons */}
+          {isExtracted && step === 'verify' && (
+            <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2.5">
+              {/* Secondary Action: Save without generating letter */}
+              <button
+                type="submit"
+                form="form-save-contract"
+                id="btn-save-contract-only"
+                className="w-full sm:w-auto px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-xl transition-all shadow-2xs cursor-pointer"
+              >
+                {language === 'fr'
+                  ? 'Enregistrer sans générer de lettre maintenant'
+                  : 'Save without letter for now'}
+              </button>
+
+              {/* Primary Action: Generate Letter */}
+              <button
+                type="button"
+                id="btn-generate-letter-flow"
+                disabled={isGeneratingLetter}
+                onClick={handleStartLetterGeneration}
+                className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                {isGeneratingLetter ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>
+                      {language === 'fr'
+                        ? 'Rédaction de la lettre...'
+                        : 'Generating letter...'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <FileSignature className="w-4 h-4 text-indigo-200" />
+                    <span>
+                      {language === 'fr'
+                        ? 'Générer la lettre de résiliation'
+                        : 'Generate Termination Letter'}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* In Letter Preview: Save Both Contract and Letter */}
+          {step === 'letter_preview' && (
+            <button
+              type="button"
+              id="btn-save-contract-and-letter"
+              onClick={handleSaveContractAndLetter}
+              className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              <Check className="w-4 h-4 text-indigo-200" />
+              <span>
+                {language === 'fr'
+                  ? 'Enregistrer le contrat et la lettre dans le tableau de bord'
+                  : 'Save Contract & Letter to Dashboard'}
+              </span>
             </button>
           )}
         </div>
