@@ -35,6 +35,7 @@ interface AddContractModalProps {
   onClose: () => void;
   onSaveContract: (newContract: Contract, generatedLetterText?: string) => void;
   companyProfile?: CompanyProfile;
+  onOpenCompanyModal?: () => void;
 }
 
 export const AddContractModal: React.FC<AddContractModalProps> = ({
@@ -42,6 +43,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
   onClose,
   onSaveContract,
   companyProfile,
+  onOpenCompanyModal,
 }) => {
   const { language } = useLanguage();
   const isFrance = (companyProfile?.country || 'FR').toUpperCase() === 'FR';
@@ -125,6 +127,39 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
   };
 
   const processFile = (file: File) => {
+    // Check file size (max 20MB)
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      setExtractionError(
+        language === 'fr'
+          ? 'Le fichier est trop volumineux (taille maximale : 20 Mo). Veuillez sélectionner un fichier plus léger.'
+          : 'The file is too large (maximum size: 20MB). Please choose a smaller file.'
+      );
+      setSelectedFile(null);
+      setFileBase64(null);
+      return;
+    }
+
+    // Check file format
+    const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt'];
+    const fileNameLower = file.name.toLowerCase();
+    const isAllowed =
+      allowedExtensions.some((ext) => fileNameLower.endsWith(ext)) ||
+      file.type.startsWith('image/') ||
+      file.type === 'application/pdf' ||
+      file.type === 'text/plain';
+
+    if (!isAllowed) {
+      setExtractionError(
+        language === 'fr'
+          ? 'Format de fichier non supporté. Veuillez importer un document PDF, une image (JPG, PNG, WebP) ou un fichier texte (TXT).'
+          : 'Unsupported file format. Please upload a PDF document, an image (JPG, PNG, WebP) or a text file (TXT).'
+      );
+      setSelectedFile(null);
+      setFileBase64(null);
+      return;
+    }
+
     setSelectedFile(file);
     setExtractionError(null);
 
@@ -132,6 +167,15 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
     reader.onload = () => {
       const result = reader.result as string;
       setFileBase64(result);
+    };
+    reader.onerror = () => {
+      setExtractionError(
+        language === 'fr'
+          ? 'Impossible de lire le fichier sélectionné. Le fichier est peut-être corrompu.'
+          : 'Unable to read the selected file. The file might be corrupted.'
+      );
+      setSelectedFile(null);
+      setFileBase64(null);
     };
     reader.readAsDataURL(file);
   };
@@ -198,7 +242,7 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
         signatureDate: ext?.signatureDate || new Date().toISOString().split('T')[0],
         startDate: ext?.startDate || new Date().toISOString().split('T')[0],
         relationshipStartDate:
-          ext?.relationshipStartDate || ext?.startDate || new Date().toISOString().split('T')[0],
+          ext?.relationshipStartDate || ext?.startDate || ext?.signatureDate || new Date().toISOString().split('T')[0],
         commitmentDurationMonths: Number(ext?.commitmentDurationMonths) || 12,
         endDate: ext?.endDate || '',
         noticePeriodDays: Number(ext?.noticePeriodDays) || 30,
@@ -238,11 +282,10 @@ export const AddContractModal: React.FC<AddContractModalProps> = ({
       return false;
     }
 
-    if (isFrance && !formData.relationshipStartDate) {
-      setExtractionError(
-        "La date de début de relation commerciale est obligatoire en France (évaluation de l'article L. 442-1 du Code de commerce)."
-      );
-      return false;
+    // Gracefully populate relationshipStartDate if not provided
+    if (!formData.relationshipStartDate) {
+      formData.relationshipStartDate =
+        formData.startDate || formData.signatureDate || new Date().toISOString().split('T')[0];
     }
 
     setExtractionError(null);

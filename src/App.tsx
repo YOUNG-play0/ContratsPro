@@ -427,6 +427,7 @@ export default function App() {
         onClose={() => setIsAddModalOpen(false)}
         onSaveContract={handleSaveContract}
         companyProfile={companyProfile}
+        onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
       />
 
       {/* 2. Contract Detail Sheet Modal */}
@@ -449,6 +450,7 @@ export default function App() {
         isOpen={!!selectedContractForLetter}
         onClose={() => setSelectedContractForLetter(null)}
         onLetterGenerated={handleLetterGenerated}
+        onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
       />
 
       {/* 4. Company Profile Settings Modal */}

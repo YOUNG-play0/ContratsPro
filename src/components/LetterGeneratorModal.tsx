@@ -34,6 +34,7 @@ interface LetterGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLetterGenerated: (contractId: string, letterText: string) => void;
+  onOpenCompanyModal?: () => void;
 }
 
 export const LetterGeneratorModal: React.FC<LetterGeneratorModalProps> = ({
@@ -42,8 +43,14 @@ export const LetterGeneratorModal: React.FC<LetterGeneratorModalProps> = ({
   isOpen,
   onClose,
   onLetterGenerated,
+  onOpenCompanyModal,
 }) => {
   if (!isOpen || !contract) return null;
+
+  const isProfileIncomplete =
+    !companyProfile.companyName?.trim() ||
+    !companyProfile.address?.trim() ||
+    !companyProfile.signatoryName?.trim();
 
   const isLongTermFR =
     (companyProfile?.country || 'FR').toUpperCase() === 'FR' && isRelationOver24Months(contract);
@@ -393,6 +400,30 @@ __________________________________________________
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
+          {/* Company Profile Incomplete Alert */}
+          {isProfileIncomplete && (
+            <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-3">
+              <div className="flex items-start space-x-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold">Profil de votre entreprise incomplet :</span>
+                  <p className="text-[11px] text-amber-800">
+                    Pour que votre lettre soit directement exploitable et valide (en-tête, SIRET, adresse et signataire), complétez les informations de votre entreprise.
+                  </p>
+                </div>
+              </div>
+              {onOpenCompanyModal && (
+                <button
+                  type="button"
+                  onClick={onOpenCompanyModal}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-semibold text-[11px] rounded-lg shrink-0 transition-colors cursor-pointer shadow-xs"
+                >
+                  Compléter profil
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Motive & Legal options bar */}
           <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 space-y-3">
             <div className="flex items-center justify-between">
